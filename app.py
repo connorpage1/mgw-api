@@ -21,17 +21,26 @@ from flask_wtf.csrf import CSRFProtect
 
 # Load environment variables
 from dotenv import load_dotenv
+# Railway provides environment variables directly, but load .env for local development
 if os.path.exists('.env.local'):
     load_dotenv('.env.local')
 elif os.path.exists('.env'):
     load_dotenv('.env')
+
+# For Railway deployment, ensure we can start without .env files
+load_dotenv()  # This will load from system environment if no .env file
 
 # App Configuration
 app = Flask(__name__)
 
 # Basic Flask Configuration
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///instance/mardi_gras_dev.db')
+# Database configuration - Railway provides DATABASE_URL
+database_url = os.environ.get('DATABASE_URL', 'sqlite:///instance/mardi_gras_dev.db')
+# Fix for Railway PostgreSQL URL format (postgresql:// vs postgres://)
+if database_url.startswith('postgres://'):
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # JWT Configuration
@@ -1606,10 +1615,24 @@ def admin_account():
             message = 'Account updated successfully.'
     return render_template('admin/account.html', user=user, message=message, error=error)
 
+# Production initialization
+def init_production_app():
+    """Initialize app for production deployment"""
+    with app.app_context():
+        try:
+            # Create tables if they don't exist
+            db.create_all()
+            print("✅ Database tables initialized")
+        except Exception as e:
+            print(f"⚠️ Database initialization warning: {e}")
+
+# Initialize database tables on startup
+init_production_app()
+
 if __name__ == '__main__':
     print("🚀 Starting Mardi Gras API with Full CRUD & Admin GUI...")
     
-    # Initialize database
+    # Initialize database for local development
     with app.app_context():
         init_db()
     
