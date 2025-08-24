@@ -1,23 +1,56 @@
 {% extends "admin/base.html" %}
 
+{% block page_title %}Glossary Dashboard{% endblock %}
+{% block header_title %}Glossary Dashboard{% endblock %}
+
 {% block content %}
-<div class="max-w-3xl mx-auto py-10">
-    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Mardi Gras World Logo" class="h-16 mx-auto mb-6">
-    <h1 class="text-3xl font-bold mb-6">Glossary Admin Dashboard</h1>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div class="bg-white bg-opacity-10 rounded-lg p-6 shadow">
-            <div class="text-2xl font-semibold text-purple-600">{{ stats.terms }}</div>
-            <div class="font-semibold text-gray-700">Terms</div>
+<div class="max-w-4xl mx-auto">
+    <!-- Welcome Section -->
+    <div class="text-center mb-8">
+        <div class="mb-4">
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Mardi Gras World Logo" class="h-20 mx-auto opacity-90">
         </div>
-        <div class="bg-white bg-opacity-10 rounded-lg p-6 shadow">
-            <div class="text-2xl font-semibold text-purple-600">{{ stats.categories }}</div>
-            <div class="font-semibold text-gray-700">Categories</div>
+        <h1 class="text-3xl font-bold text-gray-900 mb-2">Glossary Management</h1>
+        <p class="text-gray-600">Manage terms, categories, and content for the Mardi Gras glossary</p>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-white rounded-lg p-6 shadow-md hover:shadow-lg transition-all">
+            <div class="flex items-center">
+                <div class="bg-emerald-100 p-3 rounded-full mr-4">
+                    <i class="fas fa-book text-emerald-600 text-xl"></i>
+                </div>
+                <div>
+                    <div class="text-3xl font-bold text-gray-900">{{ stats.terms }}</div>
+                    <div class="font-semibold text-gray-600">Terms</div>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white rounded-lg p-6 shadow-md hover:shadow-lg transition-all">
+            <div class="flex items-center">
+                <div class="bg-emerald-100 p-3 rounded-full mr-4">
+                    <i class="fas fa-tags text-emerald-600 text-xl"></i>
+                </div>
+                <div>
+                    <div class="text-3xl font-bold text-gray-900">{{ stats.categories }}</div>
+                    <div class="font-semibold text-gray-600">Categories</div>
+                </div>
+            </div>
         </div>
     </div>
-    <div class="mt-8 flex flex-wrap gap-4">
-        <a href="{{ url_for('admin_glossary_terms_list') }}" class="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg font-semibold hover:from-purple-700 hover:to-blue-700">Manage Terms</a>
-        <a href="{{ url_for('admin_glossary_categories_list') }}" class="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg font-semibold hover:from-purple-700 hover:to-blue-700">Manage Categories</a>
-        <a href="{{ url_for('admin_glossary_bulk_upload') }}" class="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg font-semibold hover:from-purple-700 hover:to-blue-700">Bulk Upload</a>
+    <!-- Quick Actions -->
+    <div class="mt-12">
+        <h2 class="text-xl font-semibold text-gray-900 mb-6">Quick Actions</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <a href="{{ url_for('admin_glossary_terms_list') }}" class="btn-primary text-white px-6 py-4 rounded-lg font-semibold hover:shadow-lg transition-all text-center">
+                <i class="fas fa-list-ul mr-2"></i>Manage Terms
+            </a>
+            <a href="{{ url_for('admin_glossary_categories_list') }}" class="btn-primary text-white px-6 py-4 rounded-lg font-semibold hover:shadow-lg transition-all text-center">
+                <i class="fas fa-tags mr-2"></i>Manage Categories
+            </a>
+            <a href="{{ url_for('admin_glossary_bulk_upload') }}" class="btn-primary text-white px-6 py-4 rounded-lg font-semibold hover:shadow-lg transition-all text-center">
+                <i class="fas fa-upload mr-2"></i>Bulk Upload
+            </a>
+        </div>
     </div>
 </div>
 {% endblock %}
