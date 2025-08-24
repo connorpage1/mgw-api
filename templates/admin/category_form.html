@@ -24,17 +24,8 @@
             <input type="text" name="name" class="form-input w-full" required value="{{ (form_data and form_data.name) or (category and category.name) or '' }}">
         </div>
         <div class="mb-4">
-            <label class="block text-gray-700 font-medium mb-2">Icon<span class="text-red-500">*</span></label>
-            <input type="text" name="icon" class="form-input w-full" required maxlength="10" value="{{ (form_data and form_data.icon) or (category and category.icon) or '' }}">
-            <p class="text-xs text-gray-500 mt-1">Emoji or short icon (max 10 chars)</p>
-        </div>
-        <div class="mb-4">
             <label class="block text-gray-700 font-medium mb-2">Description</label>
             <textarea name="description" class="form-input w-full" rows="3">{{ (form_data and form_data.description) or (category and category.description) or '' }}</textarea>
-        </div>
-        <div class="mb-4">
-            <label class="block text-gray-700 font-medium mb-2">Sort Order</label>
-            <input type="number" name="sort_order" class="form-input w-full" value="{{ (form_data and form_data.sort_order) or (category and category.sort_order) or 0 }}">
         </div>
         <div class="mb-6">
             <label class="inline-flex items-center">

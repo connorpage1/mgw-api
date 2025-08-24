@@ -21,7 +21,6 @@
     {% for category in categories %}
         <div class="bg-white rounded-lg shadow-md p-6 {% if not category.is_active %}opacity-60{% endif %}">
             <div class="flex items-center justify-between mb-4">
-                <div class="text-3xl">{{ category.icon }}</div>
                 <span class="text-sm font-medium text-purple-600">{{ category.terms|selectattr('is_active')|list|length }} terms</span>
             </div>
             <h3 class="text-lg font-semibold text-gray-900 mb-2">{{ category.name }}</h3>

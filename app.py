@@ -79,7 +79,6 @@ class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
     slug = db.Column(db.String(100), unique=True, nullable=False)
-    icon = db.Column(db.String(10), nullable=False)
     description = db.Column(db.Text)
     sort_order = db.Column(db.Integer, default=0)
     is_active = db.Column(db.Boolean, default=True)
@@ -90,7 +89,6 @@ class Category(db.Model):
             'id': self.id,
             'name': self.name,
             'slug': self.slug,
-            'icon': self.icon,
             'description': self.description,
             'sort_order': self.sort_order,
             'is_active': self.is_active,
@@ -655,7 +653,7 @@ def admin_create_category():
     
     data = request.get_json()
     
-    required_fields = ['name', 'icon']
+    required_fields = ['name']
     for field in required_fields:
         if not data.get(field):
             return jsonify({'error': f'{field} is required'}), 400
@@ -666,7 +664,6 @@ def admin_create_category():
     category = Category(
         name=data['name'],
         slug=create_slug(data['name']),
-        icon=data['icon'],
         description=data.get('description', ''),
         sort_order=data.get('sort_order', 0),
         is_active=data.get('is_active', True)
@@ -706,8 +703,6 @@ def admin_update_category(category_id):
     if 'name' in data:
         category.name = data['name']
         category.slug = create_slug(data['name'])
-    if 'icon' in data:
-        category.icon = data['icon']
     if 'description' in data:
         category.description = data['description']
     if 'sort_order' in data:
@@ -773,9 +768,7 @@ def admin_bulk_upload():
                     category = Category(
                         name=cat['name'],
                         slug=create_slug(cat['name']),
-                        icon=cat.get('icon', ''),
                         description=cat.get('description', ''),
-                        sort_order=cat.get('sort_order', 0),
                         is_active=cat.get('is_active', True)
                     )
                     db.session.add(category)
@@ -913,35 +906,34 @@ def admin_term_delete(term_id):
 
 def admin_categories_list():
     # Render the categories list for the glossary admin
-    categories = Category.query.order_by(Category.sort_order, Category.name).all()
+    categories = Category.query.order_by(Category.name).all()
+    # Move 'Core Terms' and 'Krewes' to the front
+    core = [cat for cat in categories if cat.name == 'Core Terms']
+    krewes = [cat for cat in categories if cat.name == 'Krewes']
+    others = [cat for cat in categories if cat.name not in ('Core Terms', 'Krewes')]
+    ordered = core + krewes + others
     show_inactive = request.args.get('show_inactive', '0') == '1'
     if not show_inactive:
-        categories = [cat for cat in categories if cat.is_active]
-    return render_template('admin/categories_list.html', categories=categories, show_inactive=show_inactive)
+        ordered = [cat for cat in ordered if cat.is_active]
+    return render_template('admin/categories_list.html', categories=ordered, show_inactive=show_inactive)
 
 def admin_category_new():
     if request.method == 'POST':
         form = request.form
         name = form.get('name', '').strip()
-        icon = form.get('icon', '').strip()
         description = form.get('description', '').strip()
-        sort_order = form.get('sort_order', 0, type=int)
         is_active = bool(form.get('is_active', True))
         # Validation
         errors = []
         if not name:
             errors.append('Name is required.')
-        if not icon:
-            errors.append('Icon is required.')
         if errors:
             flash(' '.join(errors), 'danger')
             return render_template('admin/category_form.html', form_data=form)
         new_category = Category(
             name=name,
             slug=create_slug(name),
-            icon=icon,
             description=description,
-            sort_order=sort_order,
             is_active=is_active
         )
         db.session.add(new_category)
@@ -956,16 +948,12 @@ def admin_category_edit(category_id):
         form = request.form
         category.name = form.get('name', '').strip()
         category.slug = create_slug(category.name)
-        category.icon = form.get('icon', '').strip()
         category.description = form.get('description', '').strip()
-        category.sort_order = form.get('sort_order', 0, type=int)
         category.is_active = bool(form.get('is_active', True))
         # Validation
         errors = []
         if not category.name:
             errors.append('Name is required.')
-        if not category.icon:
-            errors.append('Icon is required.')
         if errors:
             flash(' '.join(errors), 'danger')
             return render_template('admin/category_form.html', category=category, form_data=form)
@@ -1056,18 +1044,17 @@ def init_db():
         # Create default categories if none exist
         if Category.query.count() == 0:
             default_categories = [
-                {'name': 'Core Terms', 'icon': '⭐', 'description': 'Essential Carnival vocabulary', 'sort_order': 1},
-                {'name': 'Krewes', 'icon': '👑', 'description': 'Carnival organizations and societies', 'sort_order': 2},
-                {'name': 'Food & Drink', 'icon': '🎂', 'description': 'Traditional Carnival cuisine', 'sort_order': 3},
-                {'name': 'Throws', 'icon': '📿', 'description': 'Items thrown from parade floats', 'sort_order': 4},
-                {'name': 'Parades', 'icon': '🎪', 'description': 'Parade terminology and logistics', 'sort_order': 5},
+                {'name': 'Core Terms', 'description': 'Essential Carnival vocabulary', 'sort_order': 1},
+                {'name': 'Krewes', 'description': 'Carnival organizations and societies', 'sort_order': 2},
+                {'name': 'Food & Drink', 'description': 'Traditional Carnival cuisine', 'sort_order': 3},
+                {'name': 'Throws', 'description': 'Items thrown from parade floats', 'sort_order': 4},
+                {'name': 'Parades', 'description': 'Parade terminology and logistics', 'sort_order': 5},
             ]
             
             for cat_data in default_categories:
                 category = Category(
                     name=cat_data['name'],
                     slug=create_slug(cat_data['name']),
-                    icon=cat_data['icon'],
                     description=cat_data['description'],
                     sort_order=cat_data['sort_order'],
                     is_active=True
