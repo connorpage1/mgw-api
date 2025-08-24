@@ -5,6 +5,7 @@ Flask-Migrate==4.0.5
 
 # Authentication (simplified - no Flask-Security-Too)
 Flask-JWT-Extended==4.6.0
+Flask-Login==0.6.3
 argon2-cffi==23.1.0
 
 # Utilities
