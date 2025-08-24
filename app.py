@@ -559,15 +559,6 @@ def login():
 
 
 
-@app.route('/debug-env', methods=['GET'])
-def debug_env():
-    """Debug endpoint to check environment variables"""
-    return jsonify({
-        'DATABASE_URL_exists': 'DATABASE_URL' in os.environ,
-        'DATABASE_URL_value': os.environ.get('DATABASE_URL', 'NOT_SET')[:50] + '...' if os.environ.get('DATABASE_URL') else 'NOT_SET',
-        'SQLALCHEMY_DATABASE_URI': app.config.get('SQLALCHEMY_DATABASE_URI', 'NOT_SET')[:50] + '...',
-        'environment_keys': list(os.environ.keys())[:10]  # Show first 10 env vars
-    })
 
 @app.route('/auth/logout', methods=['POST'])
 @jwt_required()
