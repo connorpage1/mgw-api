@@ -548,6 +548,49 @@ def login():
         return render_template('admin/login.html', error=error)
 
 
+@app.route('/debug-login', methods=['GET'])
+def debug_login():
+    """Debug endpoint to test login components"""
+    try:
+        # Test 1: Database connection
+        user_count = User.query.count()
+        
+        # Test 2: Find admin user
+        admin_user = User.query.filter_by(email='admin@mardigras.com').first()
+        
+        # Test 3: Password verification
+        password_valid = False
+        if admin_user:
+            password_valid = secure_hasher.verify_password('ANJaZjZ4MgmynBAloT3SCg', admin_user.password)
+        
+        # Test 4: User methods
+        user_methods = {}
+        if admin_user:
+            user_methods = {
+                'display_name': admin_user.display_name,
+                'is_active': admin_user.is_active,
+                'is_authenticated': admin_user.is_authenticated,
+                'get_id': admin_user.get_id()
+            }
+        
+        return jsonify({
+            'success': True,
+            'tests': {
+                'database_connection': True,
+                'user_count': user_count,
+                'admin_user_exists': admin_user is not None,
+                'password_valid': password_valid,
+                'user_methods': user_methods,
+                'flask_login_loaded': 'login_user' in globals()
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'error_type': type(e).__name__
+        }), 500
+
 @app.route('/auth/logout', methods=['POST'])
 @jwt_required()
 def secure_logout():
