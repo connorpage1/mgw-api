@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment variables
+.env
+.env.local
+.env.production
+.env.test
+*.env
+
+# Database
+*.db
+*.sqlite3
+instance/
+
+# Logs
+logs/
+*.log
+
+# Test results
+htmlcov/
+.coverage
+.pytest_cache/
+test_report.html
+security_report.json
+safety_report.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Node/npm
+node_modules/
+
+# Flask/backup
+*.bak
+*.tmp
+*.old
+
+# Static images (keep logo and favicon, ignore other uploads)
+static/images/*
+!static/images/logo.png
+!static/images/favicon.webp
+!static/images/.gitkeep

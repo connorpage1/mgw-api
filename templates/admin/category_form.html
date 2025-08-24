@@ -1,0 +1,61 @@
+{% extends "admin/base.html" %}
+
+{% block page_title %}{{ category and 'Edit' or 'New' }} Category{% endblock %}
+{% block header_title %}{{ category and 'Edit' or 'New' }} Category{% endblock %}
+
+{% block content %}
+<div class="max-w-xl mx-auto bg-white rounded-lg shadow-md p-8">
+    <h2 class="text-2xl font-bold mb-6">{{ category and 'Edit' or 'Create New' }} Category</h2>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="mb-4">
+          {% for category, message in messages %}
+            <div class="p-3 rounded mb-2 {{ 'bg-green-100 text-green-800' if category == 'success' else 'bg-red-100 text-red-800' }}">
+              {{ message }}
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    <form method="post">
+        {# If using Flask-WTF, add: {{ form.csrf_token }} #}
+        <div class="mb-4">
+            <label class="block text-gray-700 font-medium mb-2">Name<span class="text-red-500">*</span></label>
+            <input type="text" name="name" class="form-input w-full" required value="{{ (form_data and form_data.name) or (category and category.name) or '' }}">
+        </div>
+        <div class="mb-4">
+            <label class="block text-gray-700 font-medium mb-2">Icon<span class="text-red-500">*</span></label>
+            <input type="text" name="icon" class="form-input w-full" required maxlength="10" value="{{ (form_data and form_data.icon) or (category and category.icon) or '' }}">
+            <p class="text-xs text-gray-500 mt-1">Emoji or short icon (max 10 chars)</p>
+        </div>
+        <div class="mb-4">
+            <label class="block text-gray-700 font-medium mb-2">Description</label>
+            <textarea name="description" class="form-input w-full" rows="3">{{ (form_data and form_data.description) or (category and category.description) or '' }}</textarea>
+        </div>
+        <div class="mb-4">
+            <label class="block text-gray-700 font-medium mb-2">Sort Order</label>
+            <input type="number" name="sort_order" class="form-input w-full" value="{{ (form_data and form_data.sort_order) or (category and category.sort_order) or 0 }}">
+        </div>
+        <div class="mb-6">
+            <label class="inline-flex items-center">
+                <input type="hidden" name="is_active" value="0">
+                <input type="checkbox" name="is_active" value="1" class="form-checkbox" {% if (form_data and form_data.is_active) or (category and category.is_active) or (form_data is not defined and category is not defined) %}checked{% endif %}>
+                <span class="ml-2">Active</span>
+            </label>
+        </div>
+        <div class="flex items-center justify-between">
+            <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded">
+                {{ category and 'Update' or 'Create' }} Category
+            </button>
+            <a href="{{ url_for('admin_glossary_categories_list') }}" class="text-gray-600 hover:text-gray-900">Cancel</a>
+        </div>
+    </form>
+    {% if category %}
+    <form method="post" action="{{ url_for('admin_glossary_category_delete', category_id=category.id) }}" class="mt-6" onsubmit="return confirm('Are you sure you want to delete this category?');">
+        {# If using Flask-WTF, add: {{ form.csrf_token }} #}
+        <input type="hidden" name="delete" value="1">
+        <button type="submit" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded">Delete Category</button>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

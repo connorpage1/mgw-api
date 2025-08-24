@@ -1,0 +1,23 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto py-10">
+    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Mardi Gras World Logo" class="h-16 mx-auto mb-6">
+    <h1 class="text-3xl font-bold mb-6">Glossary Admin Dashboard</h1>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-white bg-opacity-10 rounded-lg p-6 shadow">
+            <div class="text-2xl font-semibold text-purple-600">{{ stats.terms }}</div>
+            <div class="text-gray-200">Terms</div>
+        </div>
+        <div class="bg-white bg-opacity-10 rounded-lg p-6 shadow">
+            <div class="text-2xl font-semibold text-purple-600">{{ stats.categories }}</div>
+            <div class="text-gray-200">Categories</div>
+        </div>
+    </div>
+    <div class="mt-8 flex flex-wrap gap-4">
+        <a href="{{ url_for('admin_glossary_terms_list') }}" class="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg font-semibold hover:from-purple-700 hover:to-blue-700">Manage Terms</a>
+        <a href="{{ url_for('admin_glossary_categories_list') }}" class="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg font-semibold hover:from-purple-700 hover:to-blue-700">Manage Categories</a>
+        <a href="{{ url_for('admin_glossary_bulk_upload') }}" class="px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg font-semibold hover:from-purple-700 hover:to-blue-700">Bulk Upload</a>
+    </div>
+</div>
+{% endblock %}

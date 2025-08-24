@@ -1,0 +1,1139 @@
+# app.py - Complete Mardi Gras API with Full CRUD and Admin GUI
+from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, session
+from flask_sqlalchemy import SQLAlchemy
+from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity, create_refresh_token
+from flask_cors import CORS
+from flask_mail import Mail
+from datetime import datetime, timedelta
+import os
+import json
+import secrets
+from sqlalchemy import func, or_, text, desc
+from functools import wraps
+import re
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
+
+# Load environment variables
+from dotenv import load_dotenv
+if os.path.exists('.env.local'):
+    load_dotenv('.env.local')
+elif os.path.exists('.env'):
+    load_dotenv('.env')
+
+# App Configuration
+app = Flask(__name__)
+
+# Basic Flask Configuration
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', secrets.token_hex(32))
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///instance/mardi_gras_dev.db')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# JWT Configuration
+app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', secrets.token_hex(32))
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
+app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
+
+# CORS Configuration
+ALLOWED_ORIGINS = os.environ.get('CORS_ORIGINS', 'http://localhost:3000,http://localhost:8000').split(',')
+
+# Initialize Extensions
+db = SQLAlchemy(app)
+jwt = JWTManager(app)
+cors = CORS(app, origins=ALLOWED_ORIGINS)
+mail = Mail(app)
+
+# JWT Blacklist
+blacklisted_tokens = set()
+
+@jwt.token_in_blocklist_loader
+def check_if_token_revoked(jwt_header, jwt_payload):
+    return jwt_payload['jti'] in blacklisted_tokens
+
+# ==================== MODELS ====================
+
+class User(db.Model):
+    __tablename__ = 'users'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(255), unique=True, nullable=False)
+    username = db.Column(db.String(255), unique=True, nullable=True)
+    password = db.Column(db.String(255), nullable=False)
+    active = db.Column(db.Boolean(), default=True)
+    is_admin = db.Column(db.Boolean(), default=False)
+    
+    # Login tracking
+    current_login_at = db.Column(db.DateTime())
+    current_login_ip = db.Column(db.String(45))
+    last_login_at = db.Column(db.DateTime())
+    last_login_ip = db.Column(db.String(45))
+    login_count = db.Column(db.Integer, default=0)
+    
+    # API Access
+    api_key = db.Column(db.String(255), unique=True, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class Category(db.Model):
+    __tablename__ = 'categories'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    slug = db.Column(db.String(100), unique=True, nullable=False)
+    icon = db.Column(db.String(10), nullable=False)
+    description = db.Column(db.Text)
+    sort_order = db.Column(db.Integer, default=0)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'slug': self.slug,
+            'icon': self.icon,
+            'description': self.description,
+            'sort_order': self.sort_order,
+            'is_active': self.is_active,
+            'term_count': len([term for term in self.terms if term.is_active])
+        }
+
+class Term(db.Model):
+    __tablename__ = 'terms'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    term = db.Column(db.String(200), unique=True, nullable=False)
+    slug = db.Column(db.String(200), unique=True, nullable=False)
+    pronunciation = db.Column(db.String(200), nullable=False)
+    definition = db.Column(db.Text, nullable=False)
+    etymology = db.Column(db.Text)
+    example = db.Column(db.Text)
+    difficulty = db.Column(db.String(20), nullable=False)
+    category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=False)
+    view_count = db.Column(db.Integer, default=0)
+    is_featured = db.Column(db.Boolean, default=False)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    category_rel = db.relationship('Category', backref='terms')
+    
+    def to_dict(self, include_related=False):
+        data = {
+            'id': self.id,
+            'term': self.term,
+            'slug': self.slug,
+            'pronunciation': self.pronunciation,
+            'definition': self.definition,
+            'etymology': self.etymology,
+            'example': self.example,
+            'difficulty': self.difficulty,
+            'category': self.category_rel.name if self.category_rel else 'Unknown',
+            'category_slug': self.category_rel.slug if self.category_rel else '',
+            'category_icon': self.category_rel.icon if self.category_rel else '',
+            'category_id': self.category_id,
+            'view_count': self.view_count,
+            'is_featured': self.is_featured,
+            'is_active': self.is_active,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat()
+        }
+        
+        if include_related:
+            data['related_terms'] = [rt.to_dict() for rt in self.get_related_terms()]
+        
+        return data
+    
+    def get_related_terms(self, limit=5):
+        """Get related terms based on category"""
+        return Term.query.filter(
+            Term.category_id == self.category_id,
+            Term.id != self.id,
+            Term.is_active == True
+        ).order_by(func.random()).limit(limit).all()
+
+# ==================== PASSWORD HASHER ====================
+
+class SecurePasswordHasher:
+    """Secure password hasher using Argon2id"""
+    
+    def __init__(self):
+        self.ph = PasswordHasher(
+            memory_cost=65536,   # 64 MB
+            time_cost=2,         # 2 iterations
+            parallelism=4,       # 4 parallel threads
+            hash_len=32,         # 32 byte hash
+            salt_len=16          # 16 byte salt
+        )
+    
+    def hash_password(self, password: str) -> str:
+        """Hash password with Argon2id"""
+        return self.ph.hash(password)
+    
+    def verify_password(self, password: str, hash_str: str) -> bool:
+        """Verify password against hash"""
+        try:
+            self.ph.verify(hash_str, password)
+            return True
+        except VerifyMismatchError:
+            return False
+        except Exception:
+            return False
+
+# Initialize password hasher
+secure_hasher = SecurePasswordHasher()
+
+# ==================== ADMIN GUI AUTHENTICATION ====================
+
+def admin_required(f):
+    """Decorator for admin-only web routes"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'admin_user_id' not in session:
+            return redirect(url_for('admin_login'))
+        
+        user = User.query.get(session['admin_user_id'])
+        if not user or not user.is_admin or not user.active:
+            session.pop('admin_user_id', None)
+            return redirect(url_for('admin_login'))
+        
+        return f(*args, **kwargs)
+    return decorated_function
+
+# ==================== ADMIN DASHBOARD FOR ALL APPS ====================
+
+@app.route('/admin/dashboard')
+@admin_required
+def admin_main_dashboard():
+    """Main admin dashboard for managing all apps"""
+    # You can add more app stats here as you add more modules
+    stats = {
+        'glossary_terms': Term.query.count(),
+        'glossary_categories': Category.query.count(),
+        'users': User.query.count(),
+        # Add more as needed
+    }
+    return render_template('admin/main_dashboard.html', stats=stats)
+
+@app.route('/admin/glossary/dashboard')
+@admin_required
+def admin_glossary_dashboard():
+    """Glossary admin dashboard landing page"""
+    stats = {
+        'terms': Term.query.count(),
+        'categories': Category.query.count(),
+        # Add more glossary-specific stats if needed
+    }
+    return render_template('admin/glossary_dashboard.html', stats=stats)
+
+# ==================== ADMIN GLOSSARY ROUTES (NAMESPACED) ====================
+
+@app.route('/admin/glossary/terms')
+@admin_required
+def admin_glossary_terms_list():
+    """List all terms for admin, with show/hide inactive toggle"""
+    page = request.args.get('page', 1, type=int)
+    search = request.args.get('search', '')
+    category_id = request.args.get('category', type=int)
+    show_inactive = request.args.get('show_inactive', '0') == '1'
+
+    query = Term.query
+
+    if search:
+        query = query.filter(or_(
+            Term.term.ilike(f'%{search}%'),
+            Term.definition.ilike(f'%{search}%')
+        ))
+
+    if category_id:
+        query = query.filter(Term.category_id == category_id)
+
+    if not show_inactive:
+        query = query.filter(Term.is_active == True)
+
+    terms = query.order_by(desc(Term.created_at)).paginate(
+        page=page, per_page=20, error_out=False
+    )
+
+    categories = Category.query.filter_by(is_active=True).all()
+
+    return render_template('admin/terms_list.html', 
+                         terms=terms, 
+                         categories=categories, 
+                         search=search, 
+                         category_id=category_id,
+                         show_inactive=show_inactive)
+
+@app.route('/admin/glossary/terms/new', methods=['GET', 'POST'])
+@admin_required
+def admin_glossary_term_new():
+    return admin_term_new()
+
+@app.route('/admin/glossary/terms/<int:term_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def admin_glossary_term_edit(term_id):
+    return admin_term_edit(term_id)
+
+@app.route('/admin/glossary/terms/<int:term_id>/delete', methods=['POST'])
+@admin_required
+def admin_glossary_term_delete(term_id):
+    return admin_term_delete(term_id)
+
+@app.route('/admin/glossary/categories')
+@admin_required
+def admin_glossary_categories_list():
+    return admin_categories_list()
+
+@app.route('/admin/glossary/categories/new', methods=['GET', 'POST'])
+@admin_required
+def admin_glossary_category_new():
+    return admin_category_new()
+
+@app.route('/admin/glossary/categories/<int:category_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def admin_glossary_category_edit(category_id):
+    return admin_category_edit(category_id)
+
+@app.route('/admin/glossary/categories/<int:category_id>/delete', methods=['POST'])
+@admin_required
+def admin_glossary_category_delete(category_id):
+    return admin_category_delete(category_id)
+
+@app.route('/admin/glossary/categories/<int:category_id>/restore', methods=['POST'])
+@admin_required
+def admin_glossary_category_restore(category_id):
+    return admin_category_restore(category_id)
+
+@app.route('/admin/glossary/bulk-upload', methods=['GET', 'POST'])
+@admin_required
+def admin_glossary_bulk_upload():
+    return admin_bulk_upload()
+
+# ==================== API AUTHENTICATION ROUTES ====================
+
+@app.route('/auth/secure-login', methods=['POST'])
+def secure_login():
+    """Secure login endpoint"""
+    data = request.get_json()
+    
+    if not data or not data.get('email') or not data.get('password'):
+        return jsonify({'error': 'Email and password required'}), 400
+    
+    # Find user by email
+    user = User.query.filter_by(email=data['email'], active=True).first()
+    
+    if not user or not secure_hasher.verify_password(data['password'], user.password):
+        return jsonify({'error': 'Invalid credentials'}), 401
+    
+    # Update login tracking
+    user.last_login_at = user.current_login_at
+    user.last_login_ip = user.current_login_ip
+    user.current_login_at = datetime.utcnow()
+    user.current_login_ip = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
+    user.login_count = (user.login_count or 0) + 1
+    
+    db.session.commit()
+    
+    # Create tokens
+    access_token = create_access_token(identity=user.id)
+    refresh_token = create_refresh_token(identity=user.id)
+    
+    return jsonify({
+        'access_token': access_token,
+        'refresh_token': refresh_token,
+        'user': {
+            'id': user.id,
+            'email': user.email,
+            'username': user.username,
+            'is_admin': user.is_admin
+        }
+    })
+
+@app.route('/auth/logout', methods=['POST'])
+@jwt_required()
+def secure_logout():
+    """Secure logout"""
+    from flask_jwt_extended import get_jwt
+    
+    jti = get_jwt()['jti']
+    blacklisted_tokens.add(jti)
+    
+    return jsonify({'message': 'Successfully logged out'})
+
+# ==================== PUBLIC API ROUTES ====================
+
+@app.route('/glossary/terms')
+def api_terms():
+    """Get terms with filtering"""
+    query = request.args.get('search', '').strip()
+    category_slug = request.args.get('category', '').strip()
+    difficulty = request.args.get('difficulty', '').strip()
+    limit = min(max(request.args.get('limit', 50, type=int), 1), 100)
+    
+    # Build query
+    terms_query = Term.query.join(Category).filter(
+        Term.is_active == True,
+        Category.is_active == True
+    )
+    
+    if query:
+        search_filter = or_(
+            Term.term.ilike(f'%{query}%'),
+            Term.definition.ilike(f'%{query}%')
+        )
+        terms_query = terms_query.filter(search_filter)
+    
+    if category_slug:
+        terms_query = terms_query.filter(Category.slug == category_slug)
+    
+    if difficulty and difficulty in ['tourist', 'local', 'expert']:
+        terms_query = terms_query.filter(Term.difficulty == difficulty)
+    
+    # Execute query
+    terms = terms_query.order_by(Term.term).limit(limit).all()
+    
+    return jsonify({
+        'terms': [term.to_dict() for term in terms],
+        'count': len(terms)
+    })
+
+@app.route('/glossary/term/<slug>')
+def api_term_detail(slug):
+    """Get single term"""
+    term = Term.query.filter_by(slug=slug, is_active=True).first()
+    if not term:
+        return jsonify({'error': 'Term not found'}), 404
+    
+    # Increment view count
+    term.view_count += 1
+    db.session.commit()
+    
+    return jsonify(term.to_dict(include_related=True))
+
+@app.route('/glossary/categories')
+def api_categories():
+    """Get all categories"""
+    categories = Category.query.filter_by(is_active=True).order_by(Category.sort_order, Category.name).all()
+    return jsonify({
+        'categories': [cat.to_dict() for cat in categories]
+    })
+
+@app.route('/glossary/stats')
+def api_stats():
+    """Get API statistics"""
+    stats = {
+        'total_terms': Term.query.filter_by(is_active=True).count(),
+        'total_categories': Category.query.filter_by(is_active=True).count(),
+        'total_views': db.session.query(func.sum(Term.view_count)).scalar() or 0,
+        'difficulty_breakdown': {
+            'tourist': Term.query.filter_by(difficulty='tourist', is_active=True).count(),
+            'local': Term.query.filter_by(difficulty='local', is_active=True).count(),
+            'expert': Term.query.filter_by(difficulty='expert', is_active=True).count()
+        }
+    }
+    return jsonify(stats)
+
+@app.route('/glossary/random')
+def api_random_term():
+    """Get random term"""
+    term = Term.query.filter_by(is_active=True).order_by(func.random()).first()
+    if term:
+        return jsonify(term.to_dict())
+    return jsonify({'error': 'No terms found'}), 404
+
+# ==================== COMPLETE CRUD API ROUTES ====================
+
+@app.route('/admin/terms', methods=['GET'])
+@jwt_required()
+def admin_get_terms():
+    """Admin: Get all terms"""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    
+    if not user or not user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    page = request.args.get('page', 1, type=int)
+    per_page = min(request.args.get('per_page', 20, type=int), 100)
+    
+    terms = Term.query.order_by(desc(Term.created_at)).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+    
+    return jsonify({
+        'terms': [term.to_dict() for term in terms.items],
+        'total': terms.total,
+        'pages': terms.pages,
+        'current_page': terms.page,
+        'has_next': terms.has_next,
+        'has_prev': terms.has_prev
+    })
+
+@app.route('/admin/terms', methods=['POST'])
+@jwt_required()
+def admin_create_term():
+    """Admin: Create new term"""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    
+    if not user or not user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    data = request.get_json()
+    
+    required_fields = ['term', 'pronunciation', 'definition', 'difficulty', 'category_id']
+    for field in required_fields:
+        if not data.get(field):
+            return jsonify({'error': f'{field} is required'}), 400
+    
+    if Term.query.filter_by(term=data['term']).first():
+        return jsonify({'error': 'Term already exists'}), 400
+    
+    category = Category.query.get(data['category_id'])
+    if not category:
+        return jsonify({'error': 'Invalid category'}), 400
+    
+    term = Term(
+        term=data['term'],
+        slug=create_slug(data['term']),
+        pronunciation=data['pronunciation'],
+        definition=data['definition'],
+        etymology=data.get('etymology', ''),
+        example=data.get('example', ''),
+        difficulty=data['difficulty'],
+        category_id=data['category_id'],
+        is_featured=data.get('is_featured', False)
+    )
+    
+    try:
+        db.session.add(term)
+        db.session.commit()
+        return jsonify(term.to_dict()), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to create term'}), 500
+
+@app.route('/admin/terms/<int:term_id>', methods=['GET'])
+@jwt_required()
+def admin_get_term(term_id):
+    """Admin: Get single term"""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    
+    if not user or not user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    term = Term.query.get(term_id)
+    if not term:
+        return jsonify({'error': 'Term not found'}), 404
+    
+    return jsonify(term.to_dict(include_related=True))
+
+@app.route('/admin/terms/<int:term_id>', methods=['PUT'])
+@jwt_required()
+def admin_update_term(term_id):
+    """Admin: Update term"""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    
+    if not user or not user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    term = Term.query.get(term_id)
+    if not term:
+        return jsonify({'error': 'Term not found'}), 404
+    
+    data = request.get_json()
+    
+    # Validate required fields
+    required_fields = ['term', 'pronunciation', 'definition', 'difficulty', 'category_id']
+    for field in required_fields:
+        if field in data and not data[field]:
+            return jsonify({'error': f'{field} cannot be empty'}), 400
+    
+    # Check if term name is taken by another term
+    if 'term' in data and data['term'] != term.term:
+        existing_term = Term.query.filter_by(term=data['term']).first()
+        if existing_term:
+            return jsonify({'error': 'Term name already exists'}), 400
+    
+    # Check if category exists
+    if 'category_id' in data:
+        category = Category.query.get(data['category_id'])
+        if not category:
+            return jsonify({'error': 'Invalid category'}), 400
+    
+    # Update fields
+    if 'term' in data:
+        term.term = data['term']
+        term.slug = create_slug(data['term'])
+    if 'pronunciation' in data:
+        term.pronunciation = data['pronunciation']
+    if 'definition' in data:
+        term.definition = data['definition']
+    if 'etymology' in data:
+        term.etymology = data['etymology']
+    if 'example' in data:
+        term.example = data['example']
+    if 'difficulty' in data:
+        term.difficulty = data['difficulty']
+    if 'category_id' in data:
+        term.category_id = data['category_id']
+    if 'is_featured' in data:
+        term.is_featured = bool(data['is_featured'])
+    if 'is_active' in data:
+        term.is_active = bool(data['is_active'])
+    
+    term.updated_at = datetime.utcnow()
+    
+    try:
+        db.session.commit()
+        return jsonify(term.to_dict())
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to update term'}), 500
+
+@app.route('/admin/terms/<int:term_id>', methods=['DELETE'])
+@jwt_required()
+def admin_delete_term(term_id):
+    """Admin: Delete term (soft delete)"""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    
+    if not user or not user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    term = Term.query.get(term_id)
+    if not term:
+        return jsonify({'error': 'Term not found'}), 404
+    
+    # Check if we should hard delete or soft delete
+    hard_delete = request.args.get('hard', 'false').lower() == 'true'
+    
+    try:
+        if hard_delete:
+            db.session.delete(term)
+        else:
+            term.is_active = False
+            term.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Term {"permanently deleted" if hard_delete else "deactivated"} successfully'
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to delete term'}), 500
+
+# ==================== CATEGORY CRUD ====================
+
+@app.route('/admin/categories', methods=['GET'])
+@jwt_required()
+def admin_get_categories():
+    """Admin: Get all categories"""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    
+    if not user or not user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    categories = Category.query.order_by(Category.sort_order, Category.name).all()
+    return jsonify({
+        'categories': [cat.to_dict() for cat in categories]
+    })
+
+@app.route('/admin/categories', methods=['POST'])
+@jwt_required()
+def admin_create_category():
+    """Admin: Create new category"""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    
+    if not user or not user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    data = request.get_json()
+    
+    required_fields = ['name', 'icon']
+    for field in required_fields:
+        if not data.get(field):
+            return jsonify({'error': f'{field} is required'}), 400
+    
+    if Category.query.filter_by(name=data['name']).first():
+        return jsonify({'error': 'Category already exists'}), 400
+    
+    category = Category(
+        name=data['name'],
+        slug=create_slug(data['name']),
+        icon=data['icon'],
+        description=data.get('description', ''),
+        sort_order=data.get('sort_order', 0),
+        is_active=data.get('is_active', True)
+    )
+    
+    try:
+        db.session.add(category)
+        db.session.commit()
+        return jsonify(category.to_dict()), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to create category'}), 500
+
+@app.route('/admin/categories/<int:category_id>', methods=['PUT'])
+@jwt_required()
+def admin_update_category(category_id):
+    """Admin: Update category"""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    
+    if not user or not user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    category = Category.query.get(category_id)
+    if not category:
+        return jsonify({'error': 'Category not found'}), 404
+    
+    data = request.get_json()
+    
+    # Check if name is taken by another category
+    if 'name' in data and data['name'] != category.name:
+        existing_category = Category.query.filter_by(name=data['name']).first()
+        if existing_category:
+            return jsonify({'error': 'Category name already exists'}), 400
+    
+    # Update fields
+    if 'name' in data:
+        category.name = data['name']
+        category.slug = create_slug(data['name'])
+    if 'icon' in data:
+        category.icon = data['icon']
+    if 'description' in data:
+        category.description = data['description']
+    if 'sort_order' in data:
+        category.sort_order = data['sort_order']
+    if 'is_active' in data:
+        category.is_active = bool(data['is_active'])
+    
+    try:
+        db.session.commit()
+        return jsonify(category.to_dict())
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to update category'}), 500
+
+@app.route('/admin/categories/<int:category_id>', methods=['DELETE'])
+@jwt_required()
+def admin_delete_category(category_id):
+    """Admin: Delete category"""
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    
+    if not user or not user.is_admin:
+        return jsonify({'error': 'Admin access required'}), 403
+    
+    category = Category.query.get(category_id)
+    if not category:
+        return jsonify({'error': 'Category not found'}), 404
+    
+    # Check if category has terms
+    term_count = Term.query.filter_by(category_id=category_id, is_active=True).count()
+    if term_count > 0:
+        return jsonify({
+            'error': f'Cannot delete category with {term_count} active terms. Move or delete terms first.'
+        }), 400
+    
+    try:
+        category.is_active = False
+        db.session.commit()
+        
+        return jsonify({'message': 'Category deactivated successfully'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to delete category'}), 500
+
+# ==================== BULK UPLOAD ROUTE ====================
+
+@app.route('/admin/bulk-upload', methods=['GET', 'POST'])
+@admin_required
+def admin_bulk_upload():
+    """Bulk upload terms and categories from JSON file"""
+    if request.method == 'POST':
+        file = request.files.get('json_file')
+        if not file or not file.filename.endswith('.json'):
+            flash('Please upload a valid JSON file.', 'error')
+            return render_template('admin/bulk_upload.html')
+        try:
+            data = json.load(file)
+            # Bulk upload categories
+            categories_data = data.get('categories', [])
+            for cat in categories_data:
+                category = Category.query.filter_by(name=cat['name']).first()
+                if not category:
+                    category = Category(
+                        name=cat['name'],
+                        slug=create_slug(cat['name']),
+                        icon=cat.get('icon', ''),
+                        description=cat.get('description', ''),
+                        sort_order=cat.get('sort_order', 0),
+                        is_active=cat.get('is_active', True)
+                    )
+                    db.session.add(category)
+            db.session.commit()
+            # Bulk upload terms
+            terms_data = data.get('terms', [])
+            for t in terms_data:
+                # Find category by name or id
+                category = None
+                if 'category_id' in t:
+                    category = Category.query.get(t['category_id'])
+                elif 'category' in t:
+                    category = Category.query.filter_by(name=t['category']).first()
+                if not category:
+                    continue  # skip terms with no valid category
+                if Term.query.filter_by(term=t['term']).first():
+                    continue  # skip duplicates
+                term = Term(
+                    term=t['term'],
+                    slug=create_slug(t['term']),
+                    pronunciation=t.get('pronunciation', ''),
+                    definition=t.get('definition', ''),
+                    etymology=t.get('etymology', ''),
+                    example=t.get('example', ''),
+                    difficulty=t.get('difficulty', 'tourist'),
+                    category_id=category.id,
+                    is_featured=t.get('is_featured', False),
+                    is_active=t.get('is_active', True)
+                )
+                db.session.add(term)
+            db.session.commit()
+            flash('Bulk upload successful!', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Bulk upload failed: {e}', 'error')
+    return render_template('admin/bulk_upload.html')
+
+# ==================== HELPER FUNCTIONS ====================
+
+# Helper functions to call the original admin glossary logic for namespaced routes
+from flask import redirect, url_for
+
+def admin_term_new():
+    if request.method == 'POST':
+        form = request.form
+        term = form.get('term', '').strip()
+        pronunciation = form.get('pronunciation', '').strip()
+        definition = form.get('definition', '').strip()
+        etymology = form.get('etymology', '').strip()
+        example = form.get('example', '').strip()
+        difficulty = form.get('difficulty', 'easy').strip()
+        category_id = form.get('category_id', type=int)
+        is_featured = bool(form.get('is_featured'))
+        is_active = bool(form.get('is_active', True))
+        # Validation
+        errors = []
+        if not term:
+            errors.append('Term is required.')
+        if not pronunciation:
+            errors.append('Pronunciation is required.')
+        if not definition:
+            errors.append('Definition is required.')
+        if not category_id:
+            errors.append('Category is required.')
+        slug = create_slug(term)
+        if Term.query.filter_by(term=term).first():
+            errors.append('A term with this name already exists.')
+        elif Term.query.filter_by(slug=slug).first():
+            errors.append('A term with this slug already exists. Please choose a different name.')
+        if errors:
+            flash(' '.join(errors), 'danger')
+            return render_template('admin/term_form.html', form_data=form, categories=Category.query.filter_by(is_active=True).all())
+        # Create term
+        new_term = Term(
+            term=term,
+            slug=slug,
+            pronunciation=pronunciation,
+            definition=definition,
+            etymology=etymology,
+            example=example,
+            difficulty=difficulty,
+            category_id=category_id,
+            is_featured=is_featured,
+            is_active=is_active
+        )
+        db.session.add(new_term)
+        db.session.commit()
+        flash('Term created successfully.', 'success')
+        return redirect(url_for('admin_glossary_terms_list'))
+    categories = Category.query.filter_by(is_active=True).all()
+    return render_template('admin/term_form.html', categories=categories)
+
+def admin_term_edit(term_id):
+    term = Term.query.get_or_404(term_id)
+    if request.method == 'POST':
+        form = request.form
+        term.term = form.get('term', '').strip()
+        term.slug = create_slug(term.term)
+        term.pronunciation = form.get('pronunciation', '').strip()
+        term.definition = form.get('definition', '').strip()
+        term.etymology = form.get('etymology', '').strip()
+        term.example = form.get('example', '').strip()
+        term.difficulty = form.get('difficulty', 'easy').strip()
+        term.category_id = form.get('category_id', type=int)
+        term.is_featured = bool(form.get('is_featured'))
+        term.is_active = bool(form.get('is_active', True))
+        # Validation
+        errors = []
+        if not term.term:
+            errors.append('Term is required.')
+        if not term.pronunciation:
+            errors.append('Pronunciation is required.')
+        if not term.definition:
+            errors.append('Definition is required.')
+        if not term.category_id:
+            errors.append('Category is required.')
+        if errors:
+            flash(' '.join(errors), 'danger')
+            return render_template('admin/term_form.html', term=term, form_data=form, categories=Category.query.filter_by(is_active=True).all())
+        db.session.commit()
+        flash('Term updated successfully.', 'success')
+        return redirect(url_for('admin_glossary_terms_list'))
+    categories = Category.query.filter_by(is_active=True).all()
+    return render_template('admin/term_form.html', term=term, categories=categories)
+
+def admin_term_delete(term_id):
+    term = Term.query.get_or_404(term_id)
+    if request.method == 'POST':
+        db.session.delete(term)
+        db.session.commit()
+        flash('Term permanently deleted.', 'success')
+        return redirect(url_for('admin_glossary_terms_list'))
+    # GET: Show confirmation page
+    return render_template('admin/confirm_delete.html', object=term, object_type='term', cancel_url=url_for('admin_glossary_terms_list'))
+
+def admin_categories_list():
+    # Render the categories list for the glossary admin
+    categories = Category.query.order_by(Category.sort_order, Category.name).all()
+    show_inactive = request.args.get('show_inactive', '0') == '1'
+    if not show_inactive:
+        categories = [cat for cat in categories if cat.is_active]
+    return render_template('admin/categories_list.html', categories=categories, show_inactive=show_inactive)
+
+def admin_category_new():
+    if request.method == 'POST':
+        form = request.form
+        name = form.get('name', '').strip()
+        icon = form.get('icon', '').strip()
+        description = form.get('description', '').strip()
+        sort_order = form.get('sort_order', 0, type=int)
+        is_active = bool(form.get('is_active', True))
+        # Validation
+        errors = []
+        if not name:
+            errors.append('Name is required.')
+        if not icon:
+            errors.append('Icon is required.')
+        if errors:
+            flash(' '.join(errors), 'danger')
+            return render_template('admin/category_form.html', form_data=form)
+        new_category = Category(
+            name=name,
+            slug=create_slug(name),
+            icon=icon,
+            description=description,
+            sort_order=sort_order,
+            is_active=is_active
+        )
+        db.session.add(new_category)
+        db.session.commit()
+        flash('Category created successfully.', 'success')
+        return redirect(url_for('admin_glossary_categories_list'))
+    return render_template('admin/category_form.html')
+
+def admin_category_edit(category_id):
+    category = Category.query.get_or_404(category_id)
+    if request.method == 'POST':
+        form = request.form
+        category.name = form.get('name', '').strip()
+        category.slug = create_slug(category.name)
+        category.icon = form.get('icon', '').strip()
+        category.description = form.get('description', '').strip()
+        category.sort_order = form.get('sort_order', 0, type=int)
+        category.is_active = bool(form.get('is_active', True))
+        # Validation
+        errors = []
+        if not category.name:
+            errors.append('Name is required.')
+        if not category.icon:
+            errors.append('Icon is required.')
+        if errors:
+            flash(' '.join(errors), 'danger')
+            return render_template('admin/category_form.html', category=category, form_data=form)
+        db.session.commit()
+        flash('Category updated successfully.', 'success')
+        return redirect(url_for('admin_glossary_categories_list'))
+    return render_template('admin/category_form.html', category=category)
+
+def admin_category_delete(category_id):
+    category = Category.query.get_or_404(category_id)
+    if request.method == 'POST':
+        db.session.delete(category)
+        db.session.commit()
+        flash('Category permanently deleted.', 'success')
+        return redirect(url_for('admin_glossary_categories_list'))
+    # GET: Show confirmation page
+    return render_template('admin/confirm_delete.html', object=category, object_type='category', cancel_url=url_for('admin_glossary_categories_list'))
+
+def admin_category_restore(category_id):
+    category = Category.query.get_or_404(category_id)
+    category.is_active = True
+    db.session.commit()
+    flash('Category restored.', 'success')
+    return redirect(url_for('admin_glossary_categories_list'))
+
+# ==================== UTILITY FUNCTIONS ====================
+
+def create_slug(text):
+    """Create URL-friendly slug"""
+    if not text:
+        return ''
+    
+    text = str(text)[:200]
+    slug = re.sub(r'[^\w\s-]', '', text.lower())
+    slug = re.sub(r'[-\s]+', '-', slug)
+    return slug.strip('-')
+
+# ==================== ERROR HANDLERS ====================
+
+@app.errorhandler(404)
+def not_found_error(error):
+    if request.path.startswith('/admin'):
+        return render_template('admin/404.html'), 404
+    return jsonify({'error': 'Resource not found'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    if request.path.startswith('/admin'):
+        return render_template('admin/500.html'), 500
+    return jsonify({'error': 'Internal server error'}), 500
+
+# JWT Error Handlers
+@jwt.expired_token_loader
+def expired_token_callback(jwt_header, jwt_payload):
+    return jsonify({'error': 'Token has expired'}), 401
+
+@jwt.invalid_token_loader
+def invalid_token_callback(error):
+    return jsonify({'error': 'Invalid token'}), 401
+
+@jwt.unauthorized_loader
+def missing_token_callback(error):
+    return jsonify({'error': 'Authentication required'}), 401
+
+# ==================== HEALTH CHECK ====================
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'healthy',
+        'timestamp': datetime.utcnow().isoformat(),
+        'version': '3.0.0-full-crud'
+    })
+
+# ==================== DATABASE INITIALIZATION ====================
+
+def init_db():
+    """Initialize database"""
+    try:
+        print("🔄 Initializing database with CRUD support...")
+        
+        # Create all tables
+        db.create_all()
+        print("✅ Database tables created")
+        
+        # Create default categories if none exist
+        if Category.query.count() == 0:
+            default_categories = [
+                {'name': 'Core Terms', 'icon': '⭐', 'description': 'Essential Carnival vocabulary', 'sort_order': 1},
+                {'name': 'Krewes', 'icon': '👑', 'description': 'Carnival organizations and societies', 'sort_order': 2},
+                {'name': 'Food & Drink', 'icon': '🎂', 'description': 'Traditional Carnival cuisine', 'sort_order': 3},
+                {'name': 'Throws', 'icon': '📿', 'description': 'Items thrown from parade floats', 'sort_order': 4},
+                {'name': 'Parades', 'icon': '🎪', 'description': 'Parade terminology and logistics', 'sort_order': 5},
+            ]
+            
+            for cat_data in default_categories:
+                category = Category(
+                    name=cat_data['name'],
+                    slug=create_slug(cat_data['name']),
+                    icon=cat_data['icon'],
+                    description=cat_data['description'],
+                    sort_order=cat_data['sort_order'],
+                    is_active=True
+                )
+                db.session.add(category)
+            
+            db.session.commit()
+            print(f"✅ Created {len(default_categories)} default categories")
+        
+        # Create admin user
+        admin_email = os.environ.get('ADMIN_EMAIL', 'admin@dev.local')
+        admin_user = User.query.filter_by(email=admin_email).first()
+        
+        if not admin_user:
+            admin_password = os.environ.get('ADMIN_PASSWORD', 'DevAdmin123!@#')
+            
+            admin_user = User(
+                email=admin_email,
+                username=os.environ.get('ADMIN_USERNAME', 'admin'),
+                password=secure_hasher.hash_password(admin_password),
+                active=True,
+                is_admin=True
+            )
+            
+            # Generate API key
+            admin_user.api_key = secrets.token_urlsafe(32)
+            
+            db.session.add(admin_user)
+            db.session.commit()
+            
+            print(f"✅ Admin user created: {admin_email}")
+            print(f"🔑 Admin API Key: {admin_user.api_key}")
+            print(f"🌐 Admin GUI: http://localhost:5555/admin")
+        
+        print("✅ Full CRUD database initialization completed!")
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"❌ Database initialization failed: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
+
+@app.route('/admin/logout')
+def admin_logout():
+    """Log out admin user from session and redirect to login page"""
+    session.pop('admin_user_id', None)
+    flash('You have been logged out.', 'info')
+    return redirect(url_for('admin_login'))
+
+@app.context_processor
+def inject_now():
+    return {'now': datetime.utcnow}
+
+if __name__ == '__main__':
+    print("🚀 Starting Mardi Gras API with Full CRUD & Admin GUI...")
+    
+    # Initialize database
+    with app.app_context():
+        init_db()
+    
+    # Start server
+    port = int(os.environ.get('PORT', 5555))
+    debug = os.environ.get('FLASK_DEBUG', 'True').lower() in ['true', '1', 'on']
+    
+    print(f"🌐 Server starting on http://localhost:{port}")
+    print(f"👨‍💼 Admin GUI: http://localhost:{port}/admin")
+    
+    app.run(debug=debug, host='0.0.0.0', port=port)

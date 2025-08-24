@@ -1,0 +1,146 @@
+{% extends "admin/base.html" %}
+
+{% block page_title %}Terms{% endblock %}
+
+{% block header_title %}Terms Management{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+    <div class="flex items-center space-x-4">
+        <form method="GET" class="flex items-center space-x-4">
+            <input type="text" name="search" value="{{ search or '' }}" placeholder="Search terms..."
+                   class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+            <select name="category" class="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                <option value="">All Categories</option>
+                {% for category in categories %}
+                    <option value="{{ category.id }}" {% if category_id == category.id %}selected{% endif %}>
+                        {{ category.icon }} {{ category.name }}
+                    </option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600">
+                <i class="fas fa-search"></i>
+            </button>
+        </form>
+        <!-- Show/Hide Inactive Toggle -->
+        <form method="GET" class="ml-4">
+            <input type="hidden" name="search" value="{{ search or '' }}">
+            <input type="hidden" name="category" value="{{ category_id or '' }}">
+            <input type="hidden" name="show_inactive" value="{% if not show_inactive %}1{% else %}0{% endif %}">
+            <button type="submit" class="px-4 py-2 rounded-lg border border-gray-400 text-xs {% if show_inactive %}bg-gray-200 text-gray-800{% else %}bg-white text-gray-500{% endif %}">
+                {% if show_inactive %}
+                    Hide Inactive
+                {% else %}
+                    Show Inactive
+                {% endif %}
+            </button>
+        </form>
+    </div>
+    <a href="{{ url_for('admin_glossary_term_new') }}" class="bg-gradient-to-r from-purple-600 to-blue-600 text-white px-6 py-2 rounded-lg hover:from-purple-700 hover:to-blue-700">
+        <i class="fas fa-plus mr-2"></i>New Term
+    </a>
+</div>
+
+<div class="bg-white rounded-lg shadow-md overflow-hidden">
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Term</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Difficulty</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Views</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% for term in terms.items %}
+                    <tr class="hover:bg-gray-50 {% if not term.is_active %}opacity-60 bg-gray-100{% endif %}">
+                        <td class="px-6 py-4">
+                            <div class="font-medium text-gray-900">{{ term.term }}</div>
+                            <div class="text-sm text-gray-500">{{ term.pronunciation }}</div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                {{ term.category_rel.icon }} {{ term.category_rel.name }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                                {% if term.difficulty == 'tourist' %}bg-green-100 text-green-800
+                                {% elif term.difficulty == 'local' %}bg-yellow-100 text-yellow-800
+                                {% else %}bg-red-100 text-red-800{% endif %}">
+                                {{ term.difficulty }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-900">{{ term.view_count }}</td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center space-x-2">
+                                {% if term.is_active %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Active</span>
+                                {% else %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Inactive</span>
+                                {% endif %}
+                                {% if term.is_featured %}
+                                    <i class="fas fa-star text-yellow-500" title="Featured"></i>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-sm font-medium">
+                            <div class="flex space-x-2">
+                                <a href="{{ url_for('admin_glossary_term_edit', term_id=term.id) }}" 
+                                   class="text-indigo-600 hover:text-indigo-900" title="Edit">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <form method="POST" action="{{ url_for('admin_glossary_term_delete', term_id=term.id) }}" 
+                                      onsubmit="return confirm('Are you sure you want to delete {{ term.term }}?')" class="inline">
+                                    <button type="submit" class="text-red-600 hover:text-red-900" title="Delete">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="6" class="px-6 py-4 text-center text-gray-500">
+                            No terms found. <a href="{{ url_for('admin_glossary_term_new') }}" class="text-purple-600 hover:text-purple-800">Create your first term</a>.
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Pagination -->
+{% if terms.pages > 1 %}
+    <div class="flex justify-center mt-6">
+        <nav class="flex space-x-2">
+            {% if terms.has_prev %}
+                <a href="{{ url_for('admin_glossary_terms_list', page=terms.prev_num, search=search, category=category_id, show_inactive=show_inactive|int) }}" 
+                   class="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50">Previous</a>
+            {% endif %}
+            
+            {% for page_num in terms.iter_pages() %}
+                {% if page_num %}
+                    {% if page_num != terms.page %}
+                        <a href="{{ url_for('admin_glossary_terms_list', page=page_num, search=search, category=category_id, show_inactive=show_inactive|int) }}" 
+                           class="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50">{{ page_num }}</a>
+                    {% else %}
+                        <span class="px-3 py-2 border bg-purple-500 text-white border-purple-500 rounded-md">{{ page_num }}</span>
+                    {% endif %}
+                {% else %}
+                    <span class="px-3 py-2">...</span>
+                {% endif %}
+            {% endfor %}
+            
+            {% if terms.has_next %}
+                <a href="{{ url_for('admin_glossary_terms_list', page=terms.next_num, search=search, category=category_id, show_inactive=show_inactive|int) }}" 
+                   class="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50">Next</a>
+            {% endif %}
+        </nav>
+    </div>
+{% endif %}
+{% endblock %}
