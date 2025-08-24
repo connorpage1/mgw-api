@@ -51,6 +51,21 @@ node_modules/
 *.tmp
 *.old
 
+# Development scripts and temporary files
+*.sh
+cookies*.txt
+response.html
+*_backup*
+*_simple*
+enhanced_*.py
+
+# Redundant documentation (keep only README.md)
+API_DOCUMENTATION.md
+DEPLOYMENT.md
+RAILWAY_DEBUG.md
+README_DEV.md
+docker-compose*.yml
+
 # Static images (keep logo and favicon, ignore other uploads)
 static/images/*
 !static/images/logo.png
