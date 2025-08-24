@@ -22,42 +22,39 @@ def init_database():
             
             # Create default roles
             print("👥 Creating default roles...")
-            roles_data = [
-                {'name': 'superadmin', 'description': 'Super Administrator'},
-                {'name': 'admin', 'description': 'Administrator'},
-                {'name': 'editor', 'description': 'Editor'},
-                {'name': 'viewer', 'description': 'Viewer'}
-            ]
+            roles_data = ['superadmin', 'admin', 'editor', 'viewer']
             
-            for role_data in roles_data:
-                existing_role = Role.query.filter_by(name=role_data['name']).first()
+            for role_name in roles_data:
+                existing_role = Role.query.filter_by(name=role_name).first()
                 if not existing_role:
-                    role = Role(name=role_data['name'], description=role_data['description'])
+                    role = Role(name=role_name)
                     db.session.add(role)
-                    print(f"  ➕ Created role: {role_data['name']}")
+                    print(f"  ➕ Created role: {role_name}")
                 else:
-                    print(f"  ✓ Role already exists: {role_data['name']}")
+                    print(f"  ✓ Role already exists: {role_name}")
             
             db.session.commit()
             
             # Create default categories
             print("📚 Creating default categories...")
             categories_data = [
-                {'name': 'Core Terms', 'description': 'Essential Mardi Gras terminology', 'icon': '🎭'},
-                {'name': 'Krewes', 'description': 'Organizations that organize parades', 'icon': '👑'},
-                {'name': 'Food & Drinks', 'description': 'Traditional Mardi Gras cuisine', 'icon': '🍰'},
-                {'name': 'Music & Dance', 'description': 'Musical traditions', 'icon': '🎵'},
-                {'name': 'History', 'description': 'Historical context and origins', 'icon': '📜'},
-                {'name': 'Traditions', 'description': 'Customs and practices', 'icon': '⭐'}
+                {'name': 'Core Terms', 'description': 'Essential Mardi Gras terminology'},
+                {'name': 'Krewes', 'description': 'Organizations that organize parades'},
+                {'name': 'Food & Drinks', 'description': 'Traditional Mardi Gras cuisine'},
+                {'name': 'Music & Dance', 'description': 'Musical traditions'},
+                {'name': 'History', 'description': 'Historical context and origins'},
+                {'name': 'Traditions', 'description': 'Customs and practices'}
             ]
             
             for cat_data in categories_data:
                 existing_cat = Category.query.filter_by(name=cat_data['name']).first()
                 if not existing_cat:
+                    # Generate slug from name
+                    slug = cat_data['name'].lower().replace(' ', '-').replace('&', 'and')
                     category = Category(
                         name=cat_data['name'],
+                        slug=slug,
                         description=cat_data['description'],
-                        icon=cat_data['icon'],
                         is_active=True
                     )
                     db.session.add(category)

@@ -42,24 +42,6 @@ if database_url.startswith('postgres://'):
     database_url = database_url.replace('postgres://', 'postgresql://', 1)
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 
-# Debug logging for database configuration
-print(f"🔍 Raw DATABASE_URL: {os.environ.get('DATABASE_URL', 'NOT_SET')[:50]}...")
-print(f"🔍 Final database_url: {database_url[:50]}...")
-print(f"🔍 Using: {'PostgreSQL' if 'postgresql://' in database_url else 'SQLite'}")
-
-# Force PostgreSQL if we're in production
-if os.environ.get('RAILWAY_ENVIRONMENT') == 'production' and not database_url.startswith('postgresql://'):
-    print("⚠️  WARNING: Production environment but no PostgreSQL URL detected!")
-    # Try alternative environment variable names
-    for alt_var in ['PGDATABASE_URL', 'POSTGRES_URL', 'DATABASE_PRIVATE_URL']:
-        alt_url = os.environ.get(alt_var)
-        if alt_url:
-            print(f"✅ Found alternative DB URL: {alt_var}")
-            database_url = alt_url
-            if database_url.startswith('postgres://'):
-                database_url = database_url.replace('postgres://', 'postgresql://', 1)
-            app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-            break
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # JWT Configuration
