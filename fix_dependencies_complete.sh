@@ -201,7 +201,6 @@ class User(db.Model):
     username = db.Column(db.String(255), unique=True, nullable=True)
     password = db.Column(db.String(255), nullable=False)
     active = db.Column(db.Boolean(), default=True)
-    is_admin = db.Column(db.Boolean(), default=False)
     
     # Login tracking
     current_login_at = db.Column(db.DateTime())
@@ -357,8 +356,7 @@ def secure_login():
         'user': {
             'id': user.id,
             'email': user.email,
-            'username': user.username,
-            'is_admin': user.is_admin
+            'username': user.username
         }
     })
 
@@ -463,7 +461,7 @@ def admin_get_terms():
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     
-    if not user or not user.is_admin:
+    if not user:
         return jsonify({'error': 'Admin access required'}), 403
     
     terms = Term.query.order_by(Term.created_at.desc()).limit(100).all()
@@ -479,7 +477,7 @@ def admin_create_term():
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     
-    if not user or not user.is_admin:
+    if not user:
         return jsonify({'error': 'Admin access required'}), 403
     
     data = request.get_json()
@@ -585,8 +583,7 @@ def init_db():
                 email=admin_email,
                 username=os.environ.get('ADMIN_USERNAME', 'admin'),
                 password=secure_hasher.hash_password(admin_password),
-                active=True,
-                is_admin=True
+                active=True
             )
             
             # Generate API key

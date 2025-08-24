@@ -9,7 +9,19 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         .admin-sidebar {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #059669 0%, #065f46 100%);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #059669 0%, #065f46 100%);
+        }
+        .accent-color {
+            color: #059669;
+        }
+        .border-accent {
+            border-color: #10b981;
         }
     </style>
 </head>
@@ -17,9 +29,9 @@
     <div class="flex h-screen">
         <!-- Sidebar -->
         <div class="admin-sidebar text-white w-64 flex flex-col">
-            <div class="p-6 border-b border-purple-400 border-opacity-30 flex flex-col items-center">
-                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Mardi Gras World Logo" class="h-14 mb-2">
-                <p class="text-purple-200 text-sm mt-1">API Management</p>
+            <!-- Sidebar logo -->
+            <div class="flex items-center justify-center px-6 py-4">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="h-10 w-auto"/>
             </div>
             
             <nav class="flex-1 p-4">
@@ -50,11 +62,16 @@
                         </a>
                     </li>
                     {% endif %}
+                    <li>
+                        <a href="{{ url_for('admin_account') }}" class="flex items-center px-4 py-2 hover:bg-blue-100">
+                            <i class="fas fa-user-cog mr-3"></i>My Account
+                        </a>
+                    </li>
                 </ul>
             </nav>
             
-            <div class="p-4 border-t border-purple-400 border-opacity-30">
-                <a href="{{ url_for('admin_logout') }}" class="flex items-center px-4 py-2 text-purple-200 hover:text-white transition-colors">
+            <div class="p-4 border-t border-emerald-400 border-opacity-30">
+                <a href="{{ url_for('admin_logout') }}" class="flex items-center px-4 py-2 text-emerald-200 hover:text-white transition-colors">
                     <i class="fas fa-sign-out-alt mr-3"></i>Logout
                 </a>
             </div>
@@ -62,18 +79,22 @@
 
         <!-- Main Content -->
         <div class="flex-1 flex flex-col overflow-hidden">
-            <!-- Header -->
-            <header class="bg-white shadow-sm border-b px-6 py-4">
-                <div class="flex items-center justify-between">
-                    <h1 class="text-2xl font-semibold text-gray-800">{% block header_title %}{% endblock %}</h1>
-                    <div class="flex items-center space-x-4">
-                        <span class="text-sm text-gray-500">Welcome, Admin</span>
-                        <div class="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center">
-                            <i class="fas fa-user text-white text-sm"></i>
-                        </div>
+
+            <!-- Top bar with profile dropdown (single, correct username/email) -->
+            <div class="flex items-center justify-end px-6 py-4 bg-white border-b">
+                <div class="relative group">
+                    <button class="flex items-center focus:outline-none" id="profileDropdownBtn">
+                        <span class="mr-2 font-semibold">Welcome, {{ current_user.display_name }}</span>
+                        <svg class="w-6 h-6 text-emerald-500" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                        </svg>
+                    </button>
+                    <div class="absolute right-0 z-10 hidden mt-2 w-48 bg-white border rounded shadow-lg group-hover:block" id="profileDropdown">
+                        <a href="{{ url_for('admin_account') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">My Account</a>
+                        <a href="{{ url_for('admin_logout') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">Logout</a>
                     </div>
                 </div>
-            </header>
+            </div>
 
             <!-- Flash Messages -->
             {% with messages = get_flashed_messages(with_categories=true) %}
@@ -94,5 +115,96 @@
             </main>
         </div>
     </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+        <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+            <h3 id="confirmTitle" class="text-lg font-semibold text-gray-900 mb-4">Confirm Action</h3>
+            <p id="confirmMessage" class="text-gray-700 mb-6">Are you sure you want to proceed?</p>
+            <div class="flex justify-end space-x-3">
+                <button id="confirmCancel" class="px-4 py-2 text-gray-600 border border-gray-300 rounded hover:bg-gray-50 transition-colors">Cancel</button>
+                <button id="confirmProceed" class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors">Delete</button>
+            </div>
+        </div>
+    </div>
+    <script>
+    // Simple JS to toggle dropdown on click for accessibility
+    const btn = document.getElementById('profileDropdownBtn');
+    const dropdown = document.getElementById('profileDropdown');
+    if (btn && dropdown) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        dropdown.classList.toggle('hidden');
+      });
+      document.addEventListener('click', function(e) {
+        if (!btn.contains(e.target) && !dropdown.contains(e.target)) {
+          dropdown.classList.add('hidden');
+        }
+      });
+    }
+
+    // Confirmation Modal functionality
+    const confirmModal = document.getElementById('confirmModal');
+    const confirmTitle = document.getElementById('confirmTitle');
+    const confirmMessage = document.getElementById('confirmMessage');
+    const confirmCancel = document.getElementById('confirmCancel');
+    const confirmProceed = document.getElementById('confirmProceed');
+    let currentForm = null;
+
+    // Function to show confirmation modal
+    function showConfirmModal(title, message, actionText = 'Delete') {
+      confirmTitle.textContent = title;
+      confirmMessage.textContent = message;
+      confirmProceed.textContent = actionText;
+      confirmModal.classList.remove('hidden');
+    }
+
+    // Function to hide confirmation modal
+    function hideConfirmModal() {
+      confirmModal.classList.add('hidden');
+      currentForm = null;
+    }
+
+    // Cancel button
+    confirmCancel.addEventListener('click', hideConfirmModal);
+
+    // Close modal when clicking outside
+    confirmModal.addEventListener('click', function(e) {
+      if (e.target === confirmModal) {
+        hideConfirmModal();
+      }
+    });
+
+    // Proceed button
+    confirmProceed.addEventListener('click', function() {
+      if (currentForm) {
+        currentForm.submit();
+      }
+      hideConfirmModal();
+    });
+
+    // Handle forms with confirmation
+    document.addEventListener('DOMContentLoaded', function() {
+      document.querySelectorAll('[data-confirm]').forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+          e.preventDefault();
+          currentForm = this;
+          const confirmData = JSON.parse(this.getAttribute('data-confirm'));
+          showConfirmModal(
+            confirmData.title || 'Confirm Action',
+            confirmData.message || 'Are you sure you want to proceed?',
+            confirmData.action || 'Delete'
+          );
+        });
+      });
+    });
+
+    // ESC key to close modal
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        hideConfirmModal();
+      }
+    });
+    </script>
 </body>
 </html>

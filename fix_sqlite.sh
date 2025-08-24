@@ -215,13 +215,6 @@ with app.app_context():
         user_count = User.query.count()
         print(f'✅ Users in database: {user_count}')
         
-        if user_count > 0:
-            admin = User.query.filter_by(is_admin=True).first()
-            if admin:
-                print(f'✅ Admin user: {admin.email}')
-            else:
-                print('⚠️ No admin user found')
-        
         term_count = Term.query.count()
         category_count = Category.query.count()
         

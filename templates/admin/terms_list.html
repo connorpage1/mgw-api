@@ -93,8 +93,9 @@
                                    class="text-indigo-600 hover:text-indigo-900" title="Edit">
                                     <i class="fas fa-edit"></i>
                                 </a>
-                                <form method="POST" action="{{ url_for('admin_glossary_term_delete', term_id=term.id) }}" 
-                                      onsubmit="return confirm('Are you sure you want to delete {{ term.term }}?')" class="inline">
+                                <form method="POST" action="{{ url_for('admin_glossary_term_delete', term_id=term.id) }}" class="inline"
+                                      data-confirm='{"title": "Delete Term", "message": "Are you sure you want to delete \"{{ term.term }}\"? This action cannot be undone.", "action": "Delete"}'>
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                     <button type="submit" class="text-red-600 hover:text-red-900" title="Delete">
                                         <i class="fas fa-trash"></i>
                                     </button>

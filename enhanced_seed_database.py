@@ -2,51 +2,86 @@
 import json
 import os
 import secrets
-from app import app, db, Category, Term, APIUser, create_slug
+from app import app, db, Category, Term, User, create_slug, Role, secure_hasher
 
 def create_admin_user():
     """Create default admin user if none exists"""
-    admin = APIUser.query.filter_by(is_admin=True).first()
+    # Look for existing superadmin user
+    admin = User.query.filter(User.roles.any(Role.name == 'superadmin')).first()
     if admin:
-        print(f"✅ Admin user already exists: {admin.username}")
+        print(f"✅ Superadmin user already exists: {admin.email}")
         return admin
     
+    # Create superadmin role if it doesn't exist
+    superadmin_role = Role.query.filter_by(name='superadmin').first()
+    if not superadmin_role:
+        superadmin_role = Role(name='superadmin')
+        db.session.add(superadmin_role)
+        db.session.commit()
+        print("✅ Created superadmin role")
+    
     # Create admin user
-    admin = APIUser(
-        username=os.environ.get('ADMIN_USERNAME', 'admin'),
-        email=os.environ.get('ADMIN_EMAIL', 'admin@mardigrasworld.com'),
-        is_admin=True,
-        is_active=True
+    admin_email = os.environ.get('ADMIN_EMAIL', 'admin@test.local')
+    admin_password = os.environ.get('ADMIN_PASSWORD', 'TestAdmin123!')
+    
+    admin = User(
+        username=os.environ.get('ADMIN_USERNAME', 'testadmin'),
+        email=admin_email,
+        first_name='Test',
+        last_name='Admin',
+        password=secure_hasher.hash_password(admin_password),
+        active=True,
+        api_key=secrets.token_urlsafe(32)
     )
-    admin.set_password(os.environ.get('ADMIN_PASSWORD', 'change_me_please'))
-    admin.generate_api_key()
     
     db.session.add(admin)
     db.session.commit()
     
-    print(f"✅ Created admin user: {admin.username}")
+    # Assign superadmin role
+    admin.roles.append(superadmin_role)
+    db.session.commit()
+    print(f"✅ Assigned superadmin role to user: {admin.email}")
+    
+    print(f"✅ Created admin user: {admin.email}")
+    print(f"🔐 Password: {admin_password}")
     print(f"🔑 Admin API Key: {admin.api_key}")
-    print(f"⚠️  Please save the API key and change the default password!")
+    print(f"⚠️  Please save these credentials!")
     
     return admin
 
 def create_api_users():
     """Create sample API users for testing"""
-    # Create a regular API user
-    if not APIUser.query.filter_by(username='api_user').first():
-        api_user = APIUser(
-            username='api_user',
-            email='api@mardigrasworld.com',
-            is_admin=False,
-            is_active=True
+    # Create a regular user role if it doesn't exist
+    user_role = Role.query.filter_by(name='user').first()
+    if not user_role:
+        user_role = Role(name='user')
+        db.session.add(user_role)
+        db.session.commit()
+        print("✅ Created user role")
+    
+    # Create a regular test user
+    if not User.query.filter_by(email='user@test.local').first():
+        test_password = 'TestUser123!'
+        api_user = User(
+            username='testuser',
+            email='user@test.local',
+            first_name='Test',
+            last_name='User',
+            password=secure_hasher.hash_password(test_password),
+            active=True,
+            api_key=secrets.token_urlsafe(32)
         )
-        api_user.set_password('secure_password_123')
-        api_user.generate_api_key()
         
         db.session.add(api_user)
         db.session.commit()
         
-        print(f"✅ Created API user: {api_user.username}")
+        # Assign user role
+        api_user.roles.append(user_role)
+        db.session.commit()
+        print(f"✅ Assigned user role to: {api_user.email}")
+        
+        print(f"✅ Created test user: {api_user.email}")
+        print(f"🔐 Password: {test_password}")
         print(f"🔑 API User Key: {api_user.api_key}")
 
 def seed_categories():
@@ -83,7 +118,6 @@ def seed_categories():
         category = Category(
             name=cat_data['name'],
             slug=create_slug(cat_data['name']),
-            icon=cat_data['icon'],
             description=cat_data['description'],
             sort_order=cat_data['sort_order'],
             is_active=True
@@ -350,7 +384,7 @@ def main():
         # Print final statistics
         total_terms = Term.query.filter_by(is_active=True).count()
         total_categories = Category.query.filter_by(is_active=True).count()
-        total_users = APIUser.query.filter_by(is_active=True).count()
+        total_users = User.query.filter_by(active=True).count()
         
         print(f"\n🎉 Enhanced seeding complete!")
         print(f"📊 Final counts:")

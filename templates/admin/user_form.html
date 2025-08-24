@@ -1,0 +1,42 @@
+{% extends "admin/base.html" %}
+
+{% block page_title %}{{ user and 'Edit' or 'New' }} User{% endblock %}
+{% block header_title %}{{ user and 'Edit' or 'New' }} User{% endblock %}
+
+{% block content %}
+<div class="max-w-xl mx-auto bg-white rounded-lg shadow-md p-8">
+    <h2 class="text-2xl font-bold mb-6">{{ user and 'Edit' or 'Create New' }} User</h2>
+    <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div class="grid grid-cols-2 gap-4 mb-4">
+            <div>
+                <label class="block text-gray-700 font-medium mb-2">First Name</label>
+                <input type="text" name="first_name" class="w-full border rounded px-3 py-2" value="{{ (form_data and form_data.first_name) or (user and user.first_name) or '' }}">
+            </div>
+            <div>
+                <label class="block text-gray-700 font-medium mb-2">Last Name</label>
+                <input type="text" name="last_name" class="w-full border rounded px-3 py-2" value="{{ (form_data and form_data.last_name) or (user and user.last_name) or '' }}">
+            </div>
+        </div>
+        <div class="mb-4">
+            <label class="block text-gray-700 font-medium mb-2">Email<span class="text-red-500">*</span></label>
+            <input type="email" name="email" class="w-full border rounded px-3 py-2" required value="{{ (form_data and form_data.email) or (user and user.email) or '' }}">
+        </div>
+        <div class="mb-4">
+            <label class="block text-gray-700 font-medium mb-2">Roles</label>
+            <select name="roles" class="w-full border rounded px-3 py-2" multiple>
+                {% for role in all_roles %}
+                <option value="{{ role.id }}" {% if user and role in user.roles %}selected{% endif %}>{{ role.name }}</option>
+                {% endfor %}
+            </select>
+            <p class="text-xs text-gray-500 mt-1">Hold Ctrl (Cmd on Mac) to select multiple roles.</p>
+        </div>
+        <div class="flex items-center justify-between">
+            <button type="submit" class="btn-primary text-white font-bold py-2 px-4 rounded hover:shadow-lg transition-all">
+                {{ user and 'Update' or 'Create' }} User
+            </button>
+            <a href="{{ url_for('admin_users_list') }}" class="text-gray-600 hover:text-gray-900">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

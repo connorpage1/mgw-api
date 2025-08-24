@@ -1,9 +1,9 @@
 # app.py - Complete Mardi Gras API with Full CRUD and Admin GUI
-from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, session
+from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, session, abort, current_app
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity, create_refresh_token
 from flask_cors import CORS
-from flask_mail import Mail
+from flask_mail import Mail, Message
 from datetime import datetime, timedelta
 import os
 import json
@@ -13,6 +13,11 @@ from functools import wraps
 import re
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
+from itsdangerous import URLSafeTimedSerializer
+from flask_login import LoginManager, current_user, login_user, logout_user
+from collections import defaultdict
+from time import time
+from flask_wtf.csrf import CSRFProtect
 
 # Load environment variables
 from dotenv import load_dotenv
@@ -37,18 +42,105 @@ app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
 # CORS Configuration
 ALLOWED_ORIGINS = os.environ.get('CORS_ORIGINS', 'http://localhost:3000,http://localhost:8000').split(',')
 
+# Mail Configuration
+app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+app.config['MAIL_PORT'] = int(os.environ.get('MAIL_PORT', 587))
+app.config['MAIL_USE_TLS'] = os.environ.get('MAIL_USE_TLS', 'True').lower() in ['true', '1', 'on']
+app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
+app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
+app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER')
+
 # Initialize Extensions
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
 cors = CORS(app, origins=ALLOWED_ORIGINS)
 mail = Mail(app)
+csrf = CSRFProtect(app)
+
+# Security Headers
+@app.after_request
+def add_security_headers(response):
+    """Add modern security headers to all responses"""
+    # Prevent clickjacking
+    response.headers['X-Frame-Options'] = 'DENY'
+    
+    # Prevent MIME type sniffing
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    
+    # XSS Protection
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    
+    # Strict Transport Security (HTTPS only in production)
+    if not app.debug:
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    
+    # Content Security Policy
+    response.headers['Content-Security-Policy'] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' cdnjs.cloudflare.com; "
+        "style-src 'self' 'unsafe-inline' cdnjs.cloudflare.com; "
+        "font-src 'self' cdnjs.cloudflare.com; "
+        "img-src 'self' data:; "
+        "connect-src 'self'"
+    )
+    
+    # Referrer Policy
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    
+    return response
+
+# Initialize Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+login_manager.login_message = 'Please log in to access this page.'
 
 # JWT Blacklist
 blacklisted_tokens = set()
 
+# Simple in-memory rate limiter
+login_attempts = defaultdict(list)
+
+def is_rate_limited(identifier, max_attempts=5, window_minutes=15):
+    """Simple rate limiting - max_attempts per window_minutes"""
+    now = time()
+    window_start = now - (window_minutes * 60)
+    
+    # Clean old attempts
+    login_attempts[identifier] = [
+        attempt_time for attempt_time in login_attempts[identifier] 
+        if attempt_time > window_start
+    ]
+    
+    # Check if limit exceeded
+    if len(login_attempts[identifier]) >= max_attempts:
+        return True
+    
+    return False
+
+def record_login_attempt(identifier):
+    """Record a failed login attempt"""
+    login_attempts[identifier].append(time())
+
+def cleanup_expired_tokens():
+    """Clean up expired password reset tokens"""
+    expired_tokens = PasswordResetToken.query.filter(
+        PasswordResetToken.expires_at < datetime.utcnow()
+    ).all()
+    
+    for token in expired_tokens:
+        db.session.delete(token)
+    
+    db.session.commit()
+    return len(expired_tokens)
+
 @jwt.token_in_blocklist_loader
 def check_if_token_revoked(jwt_header, jwt_payload):
     return jwt_payload['jti'] in blacklisted_tokens
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
 # ==================== MODELS ====================
 
@@ -58,9 +150,10 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True, nullable=False)
     username = db.Column(db.String(255), unique=True, nullable=True)
+    first_name = db.Column(db.String(100), nullable=True)
+    last_name = db.Column(db.String(100), nullable=True)
     password = db.Column(db.String(255), nullable=False)
     active = db.Column(db.Boolean(), default=True)
-    is_admin = db.Column(db.Boolean(), default=False)
     
     # Login tracking
     current_login_at = db.Column(db.DateTime())
@@ -72,6 +165,61 @@ class User(db.Model):
     # API Access
     api_key = db.Column(db.String(255), unique=True, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    roles = db.relationship('Role', secondary='roles_users', backref=db.backref('users', lazy='dynamic'))
+
+    def has_role(self, role_name):
+        return any(role.name == role_name for role in self.roles)
+    
+    @property
+    def display_name(self):
+        """Return the user's display name (first name, or username, or email)"""
+        if self.first_name:
+            return self.first_name
+        elif self.username:
+            return self.username
+        else:
+            return self.email.split('@')[0]
+    @property
+    def is_active(self):
+        return self.active
+    @property
+    def is_authenticated(self):
+        return True
+    @property
+    def is_anonymous(self):
+        return False
+    def get_id(self):
+        return str(self.id)
+    
+    def set_password(self, password):
+        """Set user password using secure hasher"""
+        self.password = secure_hasher.hash_password(password)
+
+class Role(db.Model):
+    __tablename__ = 'roles'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+
+roles_users = db.Table('roles_users',
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
+    db.Column('role_id', db.Integer, db.ForeignKey('roles.id'), primary_key=True)
+)
+
+class PasswordResetToken(db.Model):
+    """Track one-time use password reset tokens for security"""
+    __tablename__ = 'password_reset_tokens'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    token_hash = db.Column(db.String(255), unique=True, nullable=False)  # Hashed token
+    used = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    used_at = db.Column(db.DateTime, nullable=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    
+    user = db.relationship('User', backref='reset_tokens')
 
 class Category(db.Model):
     __tablename__ = 'categories'
@@ -128,7 +276,6 @@ class Term(db.Model):
             'difficulty': self.difficulty,
             'category': self.category_rel.name if self.category_rel else 'Unknown',
             'category_slug': self.category_rel.slug if self.category_rel else '',
-            'category_icon': self.category_rel.icon if self.category_rel else '',
             'category_id': self.category_id,
             'view_count': self.view_count,
             'is_featured': self.is_featured,
@@ -187,18 +334,24 @@ def admin_required(f):
     """Decorator for admin-only web routes"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'admin_user_id' not in session:
-            return redirect(url_for('admin_login'))
-        
-        user = User.query.get(session['admin_user_id'])
-        if not user or not user.is_admin or not user.active:
+        if not current_user.is_authenticated:
+            return redirect(url_for('login'))
+        user = current_user
+        if not user.active or not (user.has_role('admin') or user.has_role('superadmin')):
+            logout_user()
             session.pop('admin_user_id', None)
-            return redirect(url_for('admin_login'))
-        
+            flash('Access denied. Admin privileges required.', 'error')
+            return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
 
 # ==================== ADMIN DASHBOARD FOR ALL APPS ====================
+
+@app.route('/admin')
+@admin_required
+def admin_root():
+    """Admin root - redirect to main dashboard"""
+    return redirect(url_for('admin_main_dashboard'))
 
 @app.route('/admin/dashboard')
 @admin_required
@@ -209,6 +362,7 @@ def admin_main_dashboard():
         'glossary_terms': Term.query.count(),
         'glossary_categories': Category.query.count(),
         'users': User.query.count(),
+        'active_users': User.query.filter_by(is_active=True).count(),
         # Add more as needed
     }
     return render_template('admin/main_dashboard.html', stats=stats)
@@ -304,48 +458,46 @@ def admin_glossary_category_restore(category_id):
 
 @app.route('/admin/glossary/bulk-upload', methods=['GET', 'POST'])
 @admin_required
-def admin_glossary_bulk_upload():
-    return admin_bulk_upload()
+def admin_glossary_bulk_upload_proxy():
+    return admin_glossary_bulk_upload()
 
 # ==================== API AUTHENTICATION ROUTES ====================
 
-@app.route('/auth/secure-login', methods=['POST'])
-def secure_login():
-    """Secure login endpoint"""
-    data = request.get_json()
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Secure login endpoint with rate limiting"""
+    error = None
+    if request.method == 'GET':
+        return render_template('admin/login.html', error=error)
     
+    # Rate limiting based on IP address
+    client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
+    if is_rate_limited(client_ip):
+        error = 'Too many failed attempts. Please try again in 15 minutes.'
+        return render_template('admin/login.html', error=error), 429
+    
+    data = request.get_json() if request.is_json else request.form
     if not data or not data.get('email') or not data.get('password'):
-        return jsonify({'error': 'Email and password required'}), 400
+        error = 'Email and password required.'
+        return render_template('admin/login.html', error=error)
     
-    # Find user by email
     user = User.query.filter_by(email=data['email'], active=True).first()
-    
     if not user or not secure_hasher.verify_password(data['password'], user.password):
-        return jsonify({'error': 'Invalid credentials'}), 401
-    
+        # Record failed attempt for rate limiting
+        record_login_attempt(client_ip)
+        error = 'Invalid credentials.'
+        return render_template('admin/login.html', error=error)
     # Update login tracking
     user.last_login_at = user.current_login_at
     user.last_login_ip = user.current_login_ip
     user.current_login_at = datetime.utcnow()
     user.current_login_ip = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
     user.login_count = (user.login_count or 0) + 1
-    
     db.session.commit()
-    
-    # Create tokens
-    access_token = create_access_token(identity=user.id)
-    refresh_token = create_refresh_token(identity=user.id)
-    
-    return jsonify({
-        'access_token': access_token,
-        'refresh_token': refresh_token,
-        'user': {
-            'id': user.id,
-            'email': user.email,
-            'username': user.username,
-            'is_admin': user.is_admin
-        }
-    })
+    login_user(user)
+    session['admin_user_id'] = user.id
+    flash(f'Welcome back, {user.display_name}!', 'success')
+    return redirect(url_for('admin_main_dashboard'))
 
 @app.route('/auth/logout', methods=['POST'])
 @jwt_required()
@@ -448,7 +600,7 @@ def admin_get_terms():
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     
-    if not user or not user.is_admin:
+    if not user or not (user.has_role('admin') or user.has_role('superadmin')):
         return jsonify({'error': 'Admin access required'}), 403
     
     page = request.args.get('page', 1, type=int)
@@ -474,7 +626,7 @@ def admin_create_term():
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     
-    if not user or not user.is_admin:
+    if not user or not (user.has_role('admin') or user.has_role('superadmin')):
         return jsonify({'error': 'Admin access required'}), 403
     
     data = request.get_json()
@@ -518,7 +670,7 @@ def admin_get_term(term_id):
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     
-    if not user or not user.is_admin:
+    if not user or not (user.has_role('admin') or user.has_role('superadmin')):
         return jsonify({'error': 'Admin access required'}), 403
     
     term = Term.query.get(term_id)
@@ -534,7 +686,7 @@ def admin_update_term(term_id):
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     
-    if not user or not user.is_admin:
+    if not user or not (user.has_role('admin') or user.has_role('superadmin')):
         return jsonify({'error': 'Admin access required'}), 403
     
     term = Term.query.get(term_id)
@@ -598,7 +750,7 @@ def admin_delete_term(term_id):
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     
-    if not user or not user.is_admin:
+    if not user or not (user.has_role('admin') or user.has_role('superadmin')):
         return jsonify({'error': 'Admin access required'}), 403
     
     term = Term.query.get(term_id)
@@ -633,7 +785,7 @@ def admin_get_categories():
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     
-    if not user or not user.is_admin:
+    if not user or not (user.has_role('admin') or user.has_role('superadmin')):
         return jsonify({'error': 'Admin access required'}), 403
     
     categories = Category.query.order_by(Category.sort_order, Category.name).all()
@@ -648,7 +800,7 @@ def admin_create_category():
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     
-    if not user or not user.is_admin:
+    if not user or not (user.has_role('admin') or user.has_role('superadmin')):
         return jsonify({'error': 'Admin access required'}), 403
     
     data = request.get_json()
@@ -684,7 +836,7 @@ def admin_update_category(category_id):
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     
-    if not user or not user.is_admin:
+    if not user or not (user.has_role('admin') or user.has_role('superadmin')):
         return jsonify({'error': 'Admin access required'}), 403
     
     category = Category.query.get(category_id)
@@ -724,7 +876,7 @@ def admin_delete_category(category_id):
     user_id = get_jwt_identity()
     user = User.query.get(user_id)
     
-    if not user or not user.is_admin:
+    if not user or not (user.has_role('admin') or user.has_role('superadmin')):
         return jsonify({'error': 'Admin access required'}), 403
     
     category = Category.query.get(category_id)
@@ -751,7 +903,7 @@ def admin_delete_category(category_id):
 
 @app.route('/admin/bulk-upload', methods=['GET', 'POST'])
 @admin_required
-def admin_bulk_upload():
+def admin_glossary_bulk_upload():
     """Bulk upload terms and categories from JSON file"""
     if request.method == 'POST':
         file = request.files.get('json_file')
@@ -965,9 +1117,21 @@ def admin_category_edit(category_id):
 def admin_category_delete(category_id):
     category = Category.query.get_or_404(category_id)
     if request.method == 'POST':
-        db.session.delete(category)
-        db.session.commit()
-        flash('Category permanently deleted.', 'success')
+        # Check if category has terms
+        term_count = Term.query.filter_by(category_id=category_id, is_active=True).count()
+        if term_count > 0:
+            flash(f'Cannot delete category with {term_count} active terms. Move or delete terms first.', 'error')
+            return redirect(url_for('admin_glossary_categories_list'))
+        
+        try:
+            # Soft delete instead of hard delete
+            category.is_active = False
+            db.session.commit()
+            flash('Category deactivated successfully.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash('Failed to delete category.', 'error')
+        
         return redirect(url_for('admin_glossary_categories_list'))
     # GET: Show confirmation page
     return render_template('admin/confirm_delete.html', object=category, object_type='category', cancel_url=url_for('admin_glossary_categories_list'))
@@ -978,6 +1142,209 @@ def admin_category_restore(category_id):
     db.session.commit()
     flash('Category restored.', 'success')
     return redirect(url_for('admin_glossary_categories_list'))
+
+# ==================== USER MANAGEMENT ROUTES ====================
+
+def is_superadmin(user):
+    return any(role.name == 'superadmin' for role in user.roles)
+
+@app.route('/admin/users')
+@admin_required
+def admin_users_list():
+    user = current_user
+    if not is_superadmin(user):
+        abort(403)
+    users = User.query.all()
+    return render_template('admin/users_list.html', users=users)
+
+@app.route('/admin/users/new', methods=['GET', 'POST'])
+@admin_required
+def admin_user_new():
+    user = current_user
+    if not is_superadmin(user):
+        abort(403)
+    all_roles = Role.query.all()
+    if request.method == 'POST':
+        email = request.form.get('email').strip().lower()
+        first_name = request.form.get('first_name', '').strip()
+        last_name = request.form.get('last_name', '').strip()
+        role_ids = request.form.getlist('roles')
+        if User.query.filter_by(email=email).first():
+            flash('User already exists.', 'danger')
+            return render_template('admin/user_form.html', all_roles=all_roles, form_data=request.form)
+        # Generate a temporary password that will be replaced when user sets their password
+        import secrets
+        temp_password = secrets.token_urlsafe(32)
+        new_user = User(
+            email=email,
+            first_name=first_name if first_name else None,
+            last_name=last_name if last_name else None,
+            password=secure_hasher.hash_password(temp_password)
+        )
+        new_user.roles = [Role.query.get(int(rid)) for rid in role_ids]
+        db.session.add(new_user)
+        db.session.commit()
+        try:
+            send_set_password_email(new_user)
+            flash('User created and setup email sent.', 'success')
+        except Exception as e:
+            # Email sending failed, but user was still created successfully
+            flash('User created successfully. Email setup failed - please manually provide login credentials.', 'warning')
+            print(f'Email sending error: {e}')
+        return redirect(url_for('admin_users_list'))
+    return render_template('admin/user_form.html', all_roles=all_roles)
+
+@app.route('/admin/users/<int:user_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def admin_user_edit(user_id):
+    user = current_user
+    if not is_superadmin(user):
+        abort(403)
+    edit_user = User.query.get_or_404(user_id)
+    all_roles = Role.query.all()
+    if request.method == 'POST':
+        edit_user.email = request.form.get('email').strip().lower()
+        first_name = request.form.get('first_name', '').strip()
+        last_name = request.form.get('last_name', '').strip()
+        edit_user.first_name = first_name if first_name else None
+        edit_user.last_name = last_name if last_name else None
+        role_ids = request.form.getlist('roles')
+        edit_user.roles = [Role.query.get(int(rid)) for rid in role_ids]
+        db.session.commit()
+        flash('User updated.', 'success')
+        return redirect(url_for('admin_users_list'))
+    return render_template('admin/user_form.html', user=edit_user, all_roles=all_roles)
+
+@app.route('/admin/users/<int:user_id>/delete', methods=['POST'])
+@admin_required
+def admin_user_delete(user_id):
+    user = current_user
+    if not is_superadmin(user):
+        abort(403)
+    del_user = User.query.get_or_404(user_id)
+    if del_user.id == user.id:
+        flash('You cannot delete your own account.', 'danger')
+        return redirect(url_for('admin_users_list'))
+    db.session.delete(del_user)
+    db.session.commit()
+    flash('User deleted.', 'success')
+    return redirect(url_for('admin_users_list'))
+
+@app.route('/admin/users/<int:user_id>/reset-password', methods=['GET', 'POST'])
+@admin_required
+def admin_user_reset_password(user_id):
+    user = current_user
+    if not is_superadmin(user):
+        abort(403)
+    reset_user = User.query.get_or_404(user_id)
+    send_password_reset_email(reset_user)
+    flash('Password reset email sent.', 'success')
+    return redirect(url_for('admin_users_list'))
+
+# Email sending logic
+
+def send_set_password_email(user):
+    token = generate_password_token(user)
+    url = url_for('set_password', token=token, _external=True)
+    msg = Message('Set up your Mardi Gras Admin password', recipients=[user.email])
+    msg.html = render_template('email/welcome_set_password.html', set_password_url=url)
+    mail.send(msg)
+
+def send_password_reset_email(user):
+    token = generate_password_token(user)
+    url = url_for('set_password', token=token, _external=True)
+    msg = Message('Reset your Mardi Gras Admin password', recipients=[user.email])
+    msg.html = render_template('email/password_reset.html', reset_url=url)
+    mail.send(msg)
+
+def generate_password_token(user):
+    """Generate secure one-time password reset token"""
+    import hashlib
+    
+    # Generate a secure random token
+    raw_token = secrets.token_urlsafe(32)
+    
+    # Hash the token for database storage
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    
+    # Clean up old tokens for this user
+    PasswordResetToken.query.filter_by(user_id=user.id).delete()
+    
+    # Create new token record
+    expires_at = datetime.utcnow() + timedelta(hours=1)  # 1 hour expiry
+    token_record = PasswordResetToken(
+        user_id=user.id,
+        token_hash=token_hash,
+        expires_at=expires_at
+    )
+    db.session.add(token_record)
+    db.session.commit()
+    
+    # Return the raw token (not hashed) for the URL
+    s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+    return s.dumps({'token': raw_token, 'user_id': user.id})
+
+@app.route('/set-password/<token>', methods=['GET', 'POST'])
+def set_password(token):
+    """Secure password reset with one-time tokens"""
+    import hashlib
+    s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+    
+    try:
+        # Decode the token
+        data = s.loads(token, max_age=3600)  # 1 hour max age
+        raw_token = data['token']
+        user_id = data['user_id']
+        
+        # Hash the token to find it in database
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        
+        # Find the token record
+        token_record = PasswordResetToken.query.filter_by(
+            user_id=user_id,
+            token_hash=token_hash,
+            used=False
+        ).first()
+        
+        if not token_record:
+            flash('Invalid or expired token.', 'error')
+            return redirect(url_for('login'))
+        
+        # Check if token has expired
+        if datetime.utcnow() > token_record.expires_at:
+            flash('Token has expired. Please request a new password reset.', 'error')
+            return redirect(url_for('login'))
+        
+        user = User.query.get(user_id)
+        if not user:
+            flash('User not found.', 'error')
+            return redirect(url_for('login'))
+            
+    except Exception as e:
+        flash('Invalid or expired token.', 'error')
+        return redirect(url_for('login'))
+    if request.method == 'POST':
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        
+        if not password or len(password) < 8:
+            flash('Password must be at least 8 characters long.', 'error')
+            return render_template('set_password.html', user=user)
+        
+        if password != confirm_password:
+            flash('Passwords do not match.', 'error')
+            return render_template('set_password.html', user=user)
+            
+        user.set_password(password)
+        
+        # Mark token as used (one-time use security)
+        token_record.used = True
+        token_record.used_at = datetime.utcnow()
+        
+        db.session.commit()
+        flash('Password set successfully. You can now log in.', 'success')
+        return redirect(url_for('login'))
+    return render_template('set_password.html', user=user)
 
 # ==================== UTILITY FUNCTIONS ====================
 
@@ -996,6 +1363,9 @@ def create_slug(text):
 @app.errorhandler(404)
 def not_found_error(error):
     if request.path.startswith('/admin'):
+        # Check if user is authenticated for admin routes
+        if not current_user.is_authenticated:
+            return redirect(url_for('login'))
         return render_template('admin/404.html'), 404
     return jsonify({'error': 'Resource not found'}), 404
 
@@ -1064,27 +1434,34 @@ def init_db():
             db.session.commit()
             print(f"✅ Created {len(default_categories)} default categories")
         
+        # Create default roles if they don't exist
+        default_roles = ['superadmin', 'admin', 'editor', 'user']
+        for role_name in default_roles:
+            if not Role.query.filter_by(name=role_name).first():
+                role = Role(name=role_name)
+                db.session.add(role)
+        db.session.commit()
+        print(f"✅ Created default roles: {', '.join(default_roles)}")
+        
         # Create admin user
         admin_email = os.environ.get('ADMIN_EMAIL', 'admin@dev.local')
         admin_user = User.query.filter_by(email=admin_email).first()
-        
         if not admin_user:
             admin_password = os.environ.get('ADMIN_PASSWORD', 'DevAdmin123!@#')
-            
             admin_user = User(
                 email=admin_email,
                 username=os.environ.get('ADMIN_USERNAME', 'admin'),
                 password=secure_hasher.hash_password(admin_password),
-                active=True,
-                is_admin=True
+                active=True
             )
-            
             # Generate API key
             admin_user.api_key = secrets.token_urlsafe(32)
-            
             db.session.add(admin_user)
             db.session.commit()
-            
+            # Assign superadmin role
+            superadmin_role = Role.query.filter_by(name='superadmin').first()
+            admin_user.roles.append(superadmin_role)
+            db.session.commit()
             print(f"✅ Admin user created: {admin_email}")
             print(f"🔑 Admin API Key: {admin_user.api_key}")
             print(f"🌐 Admin GUI: http://localhost:5555/admin")
@@ -1099,15 +1476,48 @@ def init_db():
         raise
 
 @app.route('/admin/logout')
+@admin_required
 def admin_logout():
     """Log out admin user from session and redirect to login page"""
+    logout_user()
     session.pop('admin_user_id', None)
-    flash('You have been logged out.', 'info')
-    return redirect(url_for('admin_login'))
+    return redirect(url_for('login'))
 
 @app.context_processor
-def inject_now():
-    return {'now': datetime.utcnow}
+def inject_now_and_user():
+    from flask_login import current_user
+    return {'now': datetime.utcnow, 'current_user': current_user}
+
+@app.route('/admin/account', methods=['GET', 'POST'])
+@admin_required
+def admin_account():
+    user = current_user
+    message = error = None
+    if request.method == 'POST':
+        # Update name fields
+        first_name = request.form.get('first_name', '').strip()
+        last_name = request.form.get('last_name', '').strip()
+        user.first_name = first_name if first_name else None
+        user.last_name = last_name if last_name else None
+        
+        new_password = request.form.get('new_password', '').strip()
+        confirm_password = request.form.get('confirm_password', '').strip()
+        
+        if new_password:
+            if new_password != confirm_password:
+                error = 'Passwords do not match.'
+            elif len(new_password) < 8:
+                error = 'Password must be at least 8 characters.'
+            else:
+                # Set new password
+                user.password = secure_hasher.hash_password(new_password)
+                db.session.commit()
+                message = 'Account updated successfully.'
+        else:
+            # Just update name fields without password
+            db.session.commit()
+            message = 'Account updated successfully.'
+    return render_template('admin/account.html', user=user, message=message, error=error)
 
 if __name__ == '__main__':
     print("🚀 Starting Mardi Gras API with Full CRUD & Admin GUI...")
