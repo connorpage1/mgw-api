@@ -46,11 +46,61 @@
         <table class="w-full">
             <thead class="bg-gray-50">
                 <tr>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Term</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Difficulty</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Views</th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <a href="{{ url_for('admin_glossary_terms_list', sort='term', order='desc' if sort == 'term' and order == 'asc' else 'asc', search=search, category=category_id, show_inactive=show_inactive|int) }}" 
+                           class="flex items-center hover:text-emerald-600 transition-colors">
+                            Term
+                            {% if sort == 'term' %}
+                                <i class="fas fa-sort-{{ 'up' if order == 'asc' else 'down' }} ml-1 text-emerald-600"></i>
+                            {% else %}
+                                <i class="fas fa-sort ml-1 text-gray-400"></i>
+                            {% endif %}
+                        </a>
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <a href="{{ url_for('admin_glossary_terms_list', sort='category', order='desc' if sort == 'category' and order == 'asc' else 'asc', search=search, category=category_id, show_inactive=show_inactive|int) }}" 
+                           class="flex items-center hover:text-emerald-600 transition-colors">
+                            Category
+                            {% if sort == 'category' %}
+                                <i class="fas fa-sort-{{ 'up' if order == 'asc' else 'down' }} ml-1 text-emerald-600"></i>
+                            {% else %}
+                                <i class="fas fa-sort ml-1 text-gray-400"></i>
+                            {% endif %}
+                        </a>
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <a href="{{ url_for('admin_glossary_terms_list', sort='difficulty', order='desc' if sort == 'difficulty' and order == 'asc' else 'asc', search=search, category=category_id, show_inactive=show_inactive|int) }}" 
+                           class="flex items-center hover:text-emerald-600 transition-colors">
+                            Difficulty
+                            {% if sort == 'difficulty' %}
+                                <i class="fas fa-sort-{{ 'up' if order == 'asc' else 'down' }} ml-1 text-emerald-600"></i>
+                            {% else %}
+                                <i class="fas fa-sort ml-1 text-gray-400"></i>
+                            {% endif %}
+                        </a>
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <a href="{{ url_for('admin_glossary_terms_list', sort='views', order='desc' if sort == 'views' and order == 'asc' else 'asc', search=search, category=category_id, show_inactive=show_inactive|int) }}" 
+                           class="flex items-center hover:text-emerald-600 transition-colors">
+                            Views
+                            {% if sort == 'views' %}
+                                <i class="fas fa-sort-{{ 'up' if order == 'asc' else 'down' }} ml-1 text-emerald-600"></i>
+                            {% else %}
+                                <i class="fas fa-sort ml-1 text-gray-400"></i>
+                            {% endif %}
+                        </a>
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <a href="{{ url_for('admin_glossary_terms_list', sort='status', order='desc' if sort == 'status' and order == 'asc' else 'asc', search=search, category=category_id, show_inactive=show_inactive|int) }}" 
+                           class="flex items-center hover:text-emerald-600 transition-colors">
+                            Status
+                            {% if sort == 'status' %}
+                                <i class="fas fa-sort-{{ 'up' if order == 'asc' else 'down' }} ml-1 text-emerald-600"></i>
+                            {% else %}
+                                <i class="fas fa-sort ml-1 text-gray-400"></i>
+                            {% endif %}
+                        </a>
+                    </th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
             </thead>
@@ -120,14 +170,14 @@
     <div class="flex justify-center mt-6">
         <nav class="flex space-x-2">
             {% if terms.has_prev %}
-                <a href="{{ url_for('admin_glossary_terms_list', page=terms.prev_num, search=search, category=category_id, show_inactive=show_inactive|int) }}" 
+                <a href="{{ url_for('admin_glossary_terms_list', page=terms.prev_num, search=search, category=category_id, show_inactive=show_inactive|int, sort=sort, order=order) }}" 
                    class="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50 transition-all">Previous</a>
             {% endif %}
             
             {% for page_num in terms.iter_pages() %}
                 {% if page_num %}
                     {% if page_num != terms.page %}
-                        <a href="{{ url_for('admin_glossary_terms_list', page=page_num, search=search, category=category_id, show_inactive=show_inactive|int) }}" 
+                        <a href="{{ url_for('admin_glossary_terms_list', page=page_num, search=search, category=category_id, show_inactive=show_inactive|int, sort=sort, order=order) }}" 
                            class="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50 transition-all">{{ page_num }}</a>
                     {% else %}
                         <span class="px-3 py-2 border bg-emerald-600 text-white border-emerald-600 rounded-md">{{ page_num }}</span>
@@ -138,7 +188,7 @@
             {% endfor %}
             
             {% if terms.has_next %}
-                <a href="{{ url_for('admin_glossary_terms_list', page=terms.next_num, search=search, category=category_id, show_inactive=show_inactive|int) }}" 
+                <a href="{{ url_for('admin_glossary_terms_list', page=terms.next_num, search=search, category=category_id, show_inactive=show_inactive|int, sort=sort, order=order) }}" 
                    class="px-3 py-2 border border-gray-300 rounded-md hover:bg-gray-50 transition-all">Next</a>
             {% endif %}
         </nav>

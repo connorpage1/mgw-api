@@ -390,11 +390,13 @@ def admin_glossary_dashboard():
 @app.route('/admin/glossary/terms')
 @admin_required
 def admin_glossary_terms_list():
-    """List all terms for admin, with show/hide inactive toggle"""
+    """List all terms for admin, with show/hide inactive toggle and sorting"""
     page = request.args.get('page', 1, type=int)
     search = request.args.get('search', '')
     category_id = request.args.get('category', type=int)
     show_inactive = request.args.get('show_inactive', '0') == '1'
+    sort = request.args.get('sort', 'created_at')
+    order = request.args.get('order', 'desc')
 
     query = Term.query
 
@@ -410,7 +412,29 @@ def admin_glossary_terms_list():
     if not show_inactive:
         query = query.filter(Term.is_active == True)
 
-    terms = query.order_by(desc(Term.created_at)).paginate(
+    # Handle sorting
+    sort_column = Term.created_at  # default
+    if sort == 'term':
+        sort_column = Term.term
+    elif sort == 'category':
+        sort_column = Category.name
+        query = query.join(Category, Term.category_id == Category.id)
+    elif sort == 'difficulty':
+        sort_column = Term.difficulty
+    elif sort == 'views':
+        sort_column = Term.view_count
+    elif sort == 'status':
+        sort_column = Term.is_active
+    elif sort == 'created_at':
+        sort_column = Term.created_at
+
+    # Apply ordering
+    if order == 'desc':
+        query = query.order_by(desc(sort_column))
+    else:
+        query = query.order_by(sort_column)
+
+    terms = query.paginate(
         page=page, per_page=20, error_out=False
     )
 
@@ -421,7 +445,9 @@ def admin_glossary_terms_list():
                          categories=categories, 
                          search=search, 
                          category_id=category_id,
-                         show_inactive=show_inactive)
+                         show_inactive=show_inactive,
+                         sort=sort,
+                         order=order)
 
 @app.route('/admin/glossary/terms/new', methods=['GET', 'POST'])
 @admin_required

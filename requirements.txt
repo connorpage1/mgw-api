@@ -11,6 +11,18 @@ argon2-cffi==23.1.0
 Flask-CORS==4.0.0
 Flask-Mail==0.9.1
 python-dotenv==1.0.0
+Flask-WTF==1.2.1
+
+# Production server
+gunicorn==21.2.0
+
+# PostgreSQL for Railway
+psycopg2-binary==2.9.7
+
+# Testing
+pytest==7.4.4
+pytest-flask==1.3.0
+Faker==37.5.3
 
 # Optional (if Redis available)
 # Flask-Limiter==3.5.0
