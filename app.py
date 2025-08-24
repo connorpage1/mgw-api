@@ -508,29 +508,34 @@ def admin_glossary_bulk_upload_proxy():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     """Secure login endpoint with rate limiting"""
-    error = None
-    if request.method == 'GET':
-        return render_template('admin/login.html', error=error)
-    
-    # Rate limiting based on IP address
-    client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
-    if is_rate_limited(client_ip):
-        error = 'Too many failed attempts. Please try again in 15 minutes.'
-        return render_template('admin/login.html', error=error), 429
-    
-    data = request.get_json() if request.is_json else request.form
-    if not data or not data.get('email') or not data.get('password'):
-        error = 'Email and password required.'
-        return render_template('admin/login.html', error=error)
-    
-    user = User.query.filter_by(email=data['email'], active=True).first()
-    if not user or not secure_hasher.verify_password(data['password'], user.password):
-        # Record failed attempt for rate limiting
-        record_login_attempt(client_ip)
-        error = 'Invalid credentials.'
-        return render_template('admin/login.html', error=error)
-    # Update login tracking
     try:
+        error = None
+        if request.method == 'GET':
+            return render_template('admin/login.html', error=error)
+    except Exception as e:
+        return f"GET Error: {str(e)} ({type(e).__name__})", 500
+    
+    # POST request handling with comprehensive error catching
+    try:
+        # Rate limiting based on IP address
+        client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
+        if is_rate_limited(client_ip):
+            error = 'Too many failed attempts. Please try again in 15 minutes.'
+            return render_template('admin/login.html', error=error), 429
+        
+        data = request.get_json() if request.is_json else request.form
+        if not data or not data.get('email') or not data.get('password'):
+            error = 'Email and password required.'
+            return render_template('admin/login.html', error=error)
+        
+        user = User.query.filter_by(email=data['email'], active=True).first()
+        if not user or not secure_hasher.verify_password(data['password'], user.password):
+            # Record failed attempt for rate limiting
+            record_login_attempt(client_ip)
+            error = 'Invalid credentials.'
+            return render_template('admin/login.html', error=error)
+        
+        # Update login tracking
         user.last_login_at = user.current_login_at
         user.last_login_ip = user.current_login_ip
         user.current_login_at = datetime.utcnow()
@@ -541,11 +546,16 @@ def login():
         session['admin_user_id'] = user.id
         flash(f'Welcome back, {user.display_name}!', 'success')
         return redirect(url_for('admin_main_dashboard'))
+        
     except Exception as e:
-        app.logger.error(f"Login error: {str(e)}")
-        db.session.rollback()
-        error = f'Login failed: {str(e)} ({type(e).__name__})'
-        return render_template('admin/login.html', error=error)
+        import traceback
+        app.logger.error(f"POST Login error: {str(e)}")
+        app.logger.error(f"Traceback: {traceback.format_exc()}")
+        try:
+            db.session.rollback()
+        except:
+            pass
+        return f"POST Error: {str(e)} ({type(e).__name__}) - Check logs for full traceback", 500
 
 
 
