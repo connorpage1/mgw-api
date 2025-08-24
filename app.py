@@ -530,16 +530,22 @@ def login():
         error = 'Invalid credentials.'
         return render_template('admin/login.html', error=error)
     # Update login tracking
-    user.last_login_at = user.current_login_at
-    user.last_login_ip = user.current_login_ip
-    user.current_login_at = datetime.utcnow()
-    user.current_login_ip = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
-    user.login_count = (user.login_count or 0) + 1
-    db.session.commit()
-    login_user(user)
-    session['admin_user_id'] = user.id
-    flash(f'Welcome back, {user.display_name}!', 'success')
-    return redirect(url_for('admin_main_dashboard'))
+    try:
+        user.last_login_at = user.current_login_at
+        user.last_login_ip = user.current_login_ip
+        user.current_login_at = datetime.utcnow()
+        user.current_login_ip = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
+        user.login_count = (user.login_count or 0) + 1
+        db.session.commit()
+        login_user(user)
+        session['admin_user_id'] = user.id
+        flash(f'Welcome back, {user.display_name}!', 'success')
+        return redirect(url_for('admin_main_dashboard'))
+    except Exception as e:
+        app.logger.error(f"Login error: {str(e)}")
+        db.session.rollback()
+        error = 'Login failed. Please try again.'
+        return render_template('admin/login.html', error=error)
 
 @app.route('/auth/logout', methods=['POST'])
 @jwt_required()
