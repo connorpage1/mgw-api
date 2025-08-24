@@ -57,6 +57,13 @@ cors = CORS(app, origins=ALLOWED_ORIGINS)
 mail = Mail(app)
 csrf = CSRFProtect(app)
 
+# CSRF Configuration - Enable for web forms, but disable for API endpoints if they exist
+@app.context_processor
+def inject_csrf_token():
+    """Make CSRF token available in all templates"""
+    from flask_wtf.csrf import generate_csrf
+    return dict(csrf_token=generate_csrf)
+
 # Security Headers
 @app.after_request
 def add_security_headers(response):
@@ -212,7 +219,7 @@ class PasswordResetToken(db.Model):
     __tablename__ = 'password_reset_tokens'
     
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     token_hash = db.Column(db.String(255), unique=True, nullable=False)  # Hashed token
     used = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -1168,7 +1175,7 @@ def admin_user_new():
         email = request.form.get('email').strip().lower()
         first_name = request.form.get('first_name', '').strip()
         last_name = request.form.get('last_name', '').strip()
-        role_ids = request.form.getlist('roles')
+        role_id = request.form.get('role')
         if User.query.filter_by(email=email).first():
             flash('User already exists.', 'danger')
             return render_template('admin/user_form.html', all_roles=all_roles, form_data=request.form)
@@ -1181,7 +1188,10 @@ def admin_user_new():
             last_name=last_name if last_name else None,
             password=secure_hasher.hash_password(temp_password)
         )
-        new_user.roles = [Role.query.get(int(rid)) for rid in role_ids]
+        if role_id:
+            role = Role.query.get(int(role_id))
+            if role:
+                new_user.roles = [role]
         db.session.add(new_user)
         db.session.commit()
         try:
@@ -1208,12 +1218,32 @@ def admin_user_edit(user_id):
         last_name = request.form.get('last_name', '').strip()
         edit_user.first_name = first_name if first_name else None
         edit_user.last_name = last_name if last_name else None
-        role_ids = request.form.getlist('roles')
-        edit_user.roles = [Role.query.get(int(rid)) for rid in role_ids]
+        role_id = request.form.get('role')
+        if role_id:
+            role = Role.query.get(int(role_id))
+            if role:
+                edit_user.roles = [role]
+        else:
+            edit_user.roles = []
         db.session.commit()
         flash('User updated.', 'success')
         return redirect(url_for('admin_users_list'))
     return render_template('admin/user_form.html', user=edit_user, all_roles=all_roles)
+
+@app.route('/admin/users/<int:user_id>/delete-confirm', methods=['GET'])
+@admin_required
+def admin_user_delete_confirm(user_id):
+    user = current_user
+    if not is_superadmin(user):
+        abort(403)
+    del_user = User.query.get_or_404(user_id)
+    if del_user.id == user.id:
+        flash('You cannot delete your own account.', 'danger')
+        return redirect(url_for('admin_users_list'))
+    
+    return render_template('admin/confirm_delete_user.html', 
+                         user_to_delete=del_user,
+                         cancel_url=url_for('admin_users_list'))
 
 @app.route('/admin/users/<int:user_id>/delete', methods=['POST'])
 @admin_required
@@ -1225,9 +1255,14 @@ def admin_user_delete(user_id):
     if del_user.id == user.id:
         flash('You cannot delete your own account.', 'danger')
         return redirect(url_for('admin_users_list'))
+    
+    # Delete associated password reset tokens first to avoid foreign key constraint issues
+    PasswordResetToken.query.filter_by(user_id=user_id).delete()
+    
+    # Now delete the user
     db.session.delete(del_user)
     db.session.commit()
-    flash('User deleted.', 'success')
+    flash('User deleted successfully.', 'success')
     return redirect(url_for('admin_users_list'))
 
 @app.route('/admin/users/<int:user_id>/reset-password', methods=['GET', 'POST'])
@@ -1237,25 +1272,51 @@ def admin_user_reset_password(user_id):
     if not is_superadmin(user):
         abort(403)
     reset_user = User.query.get_or_404(user_id)
-    send_password_reset_email(reset_user)
-    flash('Password reset email sent.', 'success')
+    try:
+        send_password_reset_email(reset_user)
+        flash('Password reset email sent successfully.', 'success')
+    except Exception as e:
+        flash('Password reset email failed to send. Please check email configuration or contact the user manually.', 'warning')
+        print(f'Email sending error: {e}')
     return redirect(url_for('admin_users_list'))
 
 # Email sending logic
 
+def safe_send_email(msg):
+    """Safely send an email with proper error handling"""
+    # Check if email is configured
+    if not app.config.get('MAIL_USERNAME') or not app.config.get('MAIL_PASSWORD'):
+        return False, "Email not configured. Please set MAIL_USERNAME and MAIL_PASSWORD environment variables."
+    
+    try:
+        mail.send(msg)
+        return True, None
+    except ConnectionRefusedError:
+        return False, "SMTP server connection refused. Please check email server configuration."
+    except Exception as e:
+        return False, str(e)
+
 def send_set_password_email(user):
+    """Send setup email for new users"""
     token = generate_password_token(user)
     url = url_for('set_password', token=token, _external=True)
     msg = Message('Set up your Mardi Gras Admin password', recipients=[user.email])
     msg.html = render_template('email/welcome_set_password.html', set_password_url=url)
-    mail.send(msg)
+    
+    success, error = safe_send_email(msg)
+    if not success:
+        raise Exception(f"Failed to send setup email: {error}")
 
 def send_password_reset_email(user):
+    """Send password reset email"""
     token = generate_password_token(user)
     url = url_for('set_password', token=token, _external=True)
     msg = Message('Reset your Mardi Gras Admin password', recipients=[user.email])
     msg.html = render_template('email/password_reset.html', reset_url=url)
-    mail.send(msg)
+    
+    success, error = safe_send_email(msg)
+    if not success:
+        raise Exception(f"Failed to send password reset email: {error}")
 
 def generate_password_token(user):
     """Generate secure one-time password reset token"""

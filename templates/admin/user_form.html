@@ -23,13 +23,14 @@
             <input type="email" name="email" class="w-full border rounded px-3 py-2" required value="{{ (form_data and form_data.email) or (user and user.email) or '' }}">
         </div>
         <div class="mb-4">
-            <label class="block text-gray-700 font-medium mb-2">Roles</label>
-            <select name="roles" class="w-full border rounded px-3 py-2" multiple>
+            <label class="block text-gray-700 font-medium mb-2">Role<span class="text-red-500">*</span></label>
+            <select name="role" class="w-full border rounded px-3 py-2 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500" required>
+                <option value="">Select a role...</option>
                 {% for role in all_roles %}
-                <option value="{{ role.id }}" {% if user and role in user.roles %}selected{% endif %}>{{ role.name }}</option>
+                <option value="{{ role.id }}" {% if user and user.roles and role in user.roles %}selected{% endif %}>{{ role.name }}</option>
                 {% endfor %}
             </select>
-            <p class="text-xs text-gray-500 mt-1">Hold Ctrl (Cmd on Mac) to select multiple roles.</p>
+            <p class="text-xs text-gray-500 mt-1">Each user can have one primary role.</p>
         </div>
         <div class="flex items-center justify-between">
             <button type="submit" class="btn-primary text-white font-bold py-2 px-4 rounded hover:shadow-lg transition-all">

@@ -2,27 +2,127 @@
 
 {% block title %}Admin Login - Mardi Gras API{% endblock %}
 
-{% block head %}
-    <link rel="icon" type="image/webp" href="{{ url_for('static', filename='images/favicon.webp') }}">
+{% block styles %}
+<style>
+    body {
+        background: linear-gradient(135deg, #059669 0%, #065f46 100%);
+        min-height: 100vh;
+    }
+    .login-card {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        box-shadow: 0 25px 45px rgba(0, 0, 0, 0.1);
+    }
+    .btn-login {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        transition: all 0.3s ease;
+    }
+    .btn-login:hover {
+        background: linear-gradient(135deg, #059669 0%, #065f46 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+    }
+    .form-input {
+        border: 2px solid #e5e7eb;
+        transition: all 0.3s ease;
+    }
+    .form-input:focus {
+        border-color: #10b981;
+        ring: 2px solid #10b981;
+        outline: none;
+    }
+    .logo-glow {
+        filter: drop-shadow(0 0 20px rgba(16, 185, 129, 0.3));
+    }
+    .mardi-gras-text {
+        background: linear-gradient(45deg, #10b981, #059669, #065f46);
+        background-size: 300% 300%;
+        animation: gradient 3s ease infinite;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    @keyframes gradient {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+</style>
 {% endblock %}
 
 {% block content %}
-<div class="max-w-md mx-auto mt-16 p-8 bg-white rounded shadow">
-  <h2 class="text-2xl font-bold mb-6">Admin Login</h2>
-  {% if error %}
-    <div class="mb-4 text-red-700">{{ error }}</div>
-  {% endif %}
-  <form method="POST" action="{{ url_for('login') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-    <div class="mb-4">
-      <label class="block font-semibold mb-1">Email</label>
-      <input type="email" name="email" class="w-full border rounded px-3 py-2" required>
+<div class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-md w-full space-y-8">
+        <!-- Logo and Title -->
+        <div class="text-center">
+            <div class="mb-6">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" 
+                     alt="Mardi Gras Logo" 
+                     class="mx-auto h-20 w-auto logo-glow">
+            </div>
+            <h2 class="text-4xl font-extrabold text-white mb-2">
+                Mardi Gras API
+            </h2>
+            <p class="text-emerald-100 text-lg">Admin Portal</p>
+        </div>
+
+        <!-- Login Form -->
+        <div class="login-card rounded-2xl p-8">
+            <div class="text-center mb-6">
+                <h3 class="text-2xl font-bold mardi-gras-text">Welcome Back</h3>
+                <p class="text-gray-600 mt-2">Please sign in to your account</p>
+            </div>
+
+            {% if error %}
+                <div class="mb-6 p-4 rounded-lg bg-red-50 border border-red-200">
+                    <div class="flex items-center">
+                        <i class="fas fa-exclamation-circle text-red-500 mr-2"></i>
+                        <span class="text-red-700">{{ error }}</span>
+                    </div>
+                </div>
+            {% endif %}
+
+            <form method="POST" action="{{ url_for('login') }}" class="space-y-6">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                
+                <div>
+                    <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-envelope mr-2 text-emerald-600"></i>Email Address
+                    </label>
+                    <input id="email" 
+                           type="email" 
+                           name="email" 
+                           class="form-input w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-300" 
+                           placeholder="Enter your email"
+                           required>
+                </div>
+
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700 mb-2">
+                        <i class="fas fa-lock mr-2 text-emerald-600"></i>Password
+                    </label>
+                    <input id="password" 
+                           type="password" 
+                           name="password" 
+                           class="form-input w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-300" 
+                           placeholder="Enter your password"
+                           required>
+                </div>
+
+                <div>
+                    <button type="submit" 
+                            class="btn-login w-full py-3 px-4 rounded-lg text-white font-semibold text-lg shadow-lg hover:shadow-xl transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2">
+                        <i class="fas fa-sign-in-alt mr-2"></i>Sign In
+                    </button>
+                </div>
+            </form>
+
+            <div class="mt-6 text-center">
+                <p class="text-sm text-gray-500">
+                    Secure admin access • Protected by CSRF
+                </p>
+            </div>
+        </div>
     </div>
-    <div class="mb-4">
-      <label class="block font-semibold mb-1">Password</label>
-      <input type="password" name="password" class="w-full border rounded px-3 py-2" required>
-    </div>
-    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded w-full">Login</button>
-  </form>
 </div>
 {% endblock %}
