@@ -14,7 +14,7 @@ import re
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 from itsdangerous import URLSafeTimedSerializer
-from flask_login import LoginManager, current_user, login_user, logout_user
+from flask_login import LoginManager, UserMixin, current_user, login_user, logout_user
 from collections import defaultdict
 from time import time
 from flask_wtf.csrf import CSRFProtect
@@ -160,7 +160,7 @@ def load_user(user_id):
 
 # ==================== MODELS ====================
 
-class User(db.Model):
+class User(UserMixin, db.Model):
     __tablename__ = 'users'
     
     id = db.Column(db.Integer, primary_key=True)
@@ -547,33 +547,6 @@ def login():
         error = 'Login failed. Please try again.'
         return render_template('admin/login.html', error=error)
 
-@app.route('/test-login', methods=['POST'])
-def test_login():
-    """Temporary test endpoint to debug login - REMOVE IN PRODUCTION"""
-    data = request.get_json() if request.is_json else request.form
-    if not data or not data.get('email') or not data.get('password'):
-        return jsonify({'error': 'Email and password required'}), 400
-    
-    user = User.query.filter_by(email=data['email'], active=True).first()
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-        
-    if not secure_hasher.verify_password(data['password'], user.password):
-        return jsonify({'error': 'Invalid password'}), 401
-        
-    try:
-        # Update login tracking
-        user.last_login_at = user.current_login_at
-        user.last_login_ip = user.current_login_ip
-        user.current_login_at = datetime.utcnow()
-        user.current_login_ip = request.environ.get('HTTP_X_REAL_IP', request.remote_addr)
-        user.login_count = (user.login_count or 0) + 1
-        db.session.commit()
-        login_user(user)
-        return jsonify({'success': True, 'user': user.display_name})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': f'Login process failed: {str(e)}'}), 500
 
 @app.route('/auth/logout', methods=['POST'])
 @jwt_required()
