@@ -74,7 +74,7 @@ $show_hero = !isset($atts['show_hero']) || $atts['show_hero'] !== 'no';
                            value="<?php echo esc_attr($initial_search); ?>"
                            class="mgg-search-field">
                     <button id="mgg-search-btn" class="mgg-search-btn">
-                        <span class="mgg-search-icon"></span>
+                        <span class="material-icons">search</span>
                     </button>
                 </div>
                 <?php endif; ?>
@@ -171,13 +171,40 @@ $show_hero = !isset($atts['show_hero']) || $atts['show_hero'] !== 'no';
                         of <strong id="mgg-count-total"><?php echo $total_count; ?></strong> terms
                     </span>
                 </div>
+            </div>
+            
+            <!-- Controls Row -->
+            <div class="mgg-controls-row">
+                <div class="mgg-inline-filters">
+                    <div class="mgg-filter-item">
+                        <label for="mgg-difficulty-filter-inline" class="mgg-filter-label">Difficulty:</label>
+                        <select id="mgg-difficulty-filter-inline" class="mgg-filter-select">
+                            <option value="">All Levels</option>
+                            <option value="tourist" <?php selected($initial_difficulty, 'tourist'); ?>>Tourist</option>
+                            <option value="local" <?php selected($initial_difficulty, 'local'); ?>>Local</option>
+                            <option value="expert" <?php selected($initial_difficulty, 'expert'); ?>>Expert</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mgg-filter-item">
+                        <label for="mgg-sort-filter-inline" class="mgg-filter-label">Sort by:</label>
+                        <select id="mgg-sort-filter-inline" class="mgg-filter-select">
+                            <option value="term" <?php selected($initial_sort, 'term'); ?>>Alphabetical</option>
+                            <option value="category" <?php selected($initial_sort, 'category'); ?>>Category</option>
+                            <option value="difficulty" <?php selected($initial_sort, 'difficulty'); ?>>Difficulty</option>
+                            <option value="views" <?php selected($initial_sort, 'views'); ?>>Most Popular</option>
+                        </select>
+                    </div>
+                </div>
                 
                 <div class="mgg-view-controls">
                     <button id="mgg-grid-view" class="mgg-view-btn mgg-view-active" data-view="grid" title="Grid View">
-                        <span class="mgg-grid-icon">⊞</span>
+                        <span class="material-icons">grid_view</span>
+                        <span class="mgg-view-text">Grid</span>
                     </button>
                     <button id="mgg-list-view" class="mgg-view-btn" data-view="list" title="List View">
-                        <span class="mgg-list-icon">☰</span>
+                        <span class="material-icons">view_list</span>
+                        <span class="mgg-view-text">List</span>
                     </button>
                 </div>
             </div>
@@ -185,7 +212,7 @@ $show_hero = !isset($atts['show_hero']) || $atts['show_hero'] !== 'no';
             <!-- Loading Indicator -->
             <div class="mgg-loading" id="mgg-loading" style="display: none;">
                 <div class="mgg-loading-content">
-                    <span class="mgg-spinner">⟳</span>
+                    <span class="material-icons mgg-spinner">refresh</span>
                     <span class="mgg-loading-text">Loading terms...</span>
                 </div>
             </div>

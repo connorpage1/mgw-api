@@ -44,11 +44,11 @@
         currentFilters.difficulty = urlParams.get('difficulty') || '';
         currentFilters.sort = urlParams.get('sort') || 'term';
         
-        // Set form values
+        // Set form values (including inline controls)
         $('#mgg-search-input').val(currentFilters.search);
         $('#mgg-category-filter').val(currentFilters.category);
-        $('#mgg-difficulty-filter').val(currentFilters.difficulty);
-        $('#mgg-sort-filter').val(currentFilters.sort);
+        $('#mgg-difficulty-filter, #mgg-difficulty-filter-inline').val(currentFilters.difficulty);
+        $('#mgg-sort-filter, #mgg-sort-filter-inline').val(currentFilters.sort);
     }
     
     function bindSearchEvents() {
@@ -90,16 +90,20 @@
             performSearch();
         });
         
-        // Difficulty filter
-        $('#mgg-difficulty-filter').on('change', function() {
+        // Difficulty filters (both sidebar and inline)
+        $('#mgg-difficulty-filter, #mgg-difficulty-filter-inline').on('change', function() {
             currentFilters.difficulty = $(this).val();
+            // Sync both dropdowns
+            $('#mgg-difficulty-filter, #mgg-difficulty-filter-inline').val($(this).val());
             currentPage = 1;
             performSearch();
         });
         
-        // Sort filter
-        $('#mgg-sort-filter').on('change', function() {
+        // Sort filters (both sidebar and inline)
+        $('#mgg-sort-filter, #mgg-sort-filter-inline').on('change', function() {
             currentFilters.sort = $(this).val();
+            // Sync both dropdowns
+            $('#mgg-sort-filter, #mgg-sort-filter-inline').val($(this).val());
             currentPage = 1;
             performSearch();
         });
@@ -156,7 +160,8 @@
             category: currentFilters.category,
             difficulty: currentFilters.difficulty,
             sort: currentFilters.sort,
-            page: currentPage
+            page: currentPage,
+            limit: 0  // 0 means no limit - load all terms
         };
         
         $.ajax({
@@ -225,50 +230,48 @@
         const categoryUrl = mgg_ajax.home_url + '/mardi-gras/glossary/category/' + term.category_slug + '/';
         const difficultyClass = 'mgg-difficulty-' + term.difficulty.toLowerCase();
         
+        // Shorter definition for more compact cards
         let definition = term.definition;
-        if (definition.length > 150) {
-            definition = definition.substring(0, 150) + '...';
+        if (definition.length > 120) {
+            definition = definition.substring(0, 120) + '...';
         }
         
+        // Shorter example text
         let example = '';
         if (term.example && term.example.length > 0) {
             let exampleText = term.example;
-            if (exampleText.length > 100) {
-                exampleText = exampleText.substring(0, 100) + '...';
+            if (exampleText.length > 80) {
+                exampleText = exampleText.substring(0, 80) + '...';
             }
             example = `<div class="mgg-term-example"><strong>Example:</strong> ${escapeHtml(exampleText)}</div>`;
         }
-        
-        const viewCount = '';
         
         const featuredBadge = term.is_featured ? 
             `<span class="mgg-featured-badge">⭐ Featured</span>` : '';
         
         return `
             <article class="mgg-term-card ${difficultyClass}" data-term-id="${term.id}">
+                <div class="mgg-card-top">
+                    <a href="${categoryUrl}" class="mgg-category-badge">${escapeHtml(term.category)}</a>
+                    <span class="mgg-pronunciation-top">${escapeHtml(term.pronunciation)}</span>
+                </div>
                 <header class="mgg-term-header">
                     <h3 class="mgg-term-title">
                         <a href="${termUrl}" class="mgg-term-link">${escapeHtml(term.term)}</a>
                     </h3>
-                    <div class="mgg-term-meta">
-                        <span class="mgg-term-pronunciation">${escapeHtml(term.pronunciation)}</span>
-                        <div class="mgg-term-badges">
-                            <a href="${categoryUrl}" class="mgg-category-badge">${escapeHtml(term.category)}</a>
-                            <span class="mgg-difficulty-badge mgg-difficulty-${term.difficulty.toLowerCase()}">
-                                ${term.difficulty.charAt(0).toUpperCase() + term.difficulty.slice(1)}
-                            </span>
-                        </div>
-                    </div>
                 </header>
                 <div class="mgg-term-content">
                     <div class="mgg-term-definition">${escapeHtml(definition)}</div>
                     ${example}
                 </div>
+                <div class="mgg-difficulty-section">
+                    <span class="mgg-difficulty-label">Difficulty:</span>
+                    <span class="mgg-difficulty-badge mgg-difficulty-${term.difficulty.toLowerCase()}">
+                        ${term.difficulty.charAt(0).toUpperCase() + term.difficulty.slice(1)}
+                    </span>
+                    ${featuredBadge}
+                </div>
                 <footer class="mgg-term-footer">
-                    <div class="mgg-term-stats">
-                        ${viewCount}
-                        ${featuredBadge}
-                    </div>
                     <a href="${termUrl}" class="mgg-read-more">Learn More →</a>
                 </footer>
             </article>
@@ -361,11 +364,11 @@
         };
         currentPage = 1;
         
-        // Reset form values
+        // Reset form values (including inline controls)
         $('#mgg-search-input').val('');
         $('#mgg-category-filter').val('');
-        $('#mgg-difficulty-filter').val('');
-        $('#mgg-sort-filter').val('term');
+        $('#mgg-difficulty-filter, #mgg-difficulty-filter-inline').val('');
+        $('#mgg-sort-filter, #mgg-sort-filter-inline').val('term');
         
         performSearch();
     };

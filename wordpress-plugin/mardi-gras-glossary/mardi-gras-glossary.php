@@ -3,7 +3,7 @@
  * Plugin Name: Mardi Gras Glossary
  * Plugin URI: https://github.com/your-username/mardi-gras-glossary
  * Description: A comprehensive Mardi Gras terminology glossary with search, filtering, and SEO optimization. Integrates with your Mardi Gras API and Inspiro theme.
- * Version: 1.1.7
+ * Version: 1.2.3
  * Author: Connor Page
  * Author URI: https://connorpage.com
  * License: GPL v2 or later
@@ -24,7 +24,7 @@ if (!defined('ABSPATH')) {
 // Define plugin constants
 define('MGG_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('MGG_PLUGIN_PATH', plugin_dir_path(__FILE__));
-define('MGG_VERSION', '1.1.7');
+define('MGG_VERSION', '1.2.3');
 
 // Main plugin class
 class MardiGrasGlossary {
@@ -150,6 +150,9 @@ class MardiGrasGlossary {
     
     public function enqueue_scripts() {
         if ($this->is_glossary_page()) {
+            // Add Material UI Icons
+            wp_enqueue_style('material-icons', 'https://fonts.googleapis.com/icon?family=Material+Icons', array(), null);
+            
             wp_enqueue_style('mgg-styles', MGG_PLUGIN_URL . 'assets/css/glossary.css', array(), MGG_VERSION);
             wp_enqueue_script('mgg-scripts', MGG_PLUGIN_URL . 'assets/js/glossary.js', array('jquery'), MGG_VERSION, true);
             
@@ -299,7 +302,13 @@ class MardiGrasGlossary {
         $cache_key = 'mgg_terms_' . md5(serialize($params));
         $cached_data = get_transient($cache_key);
         
-        if ($cached_data !== false) {
+        // Force fresh data if we detect old limit issues
+        $force_fresh = false;
+        if ($cached_data && isset($cached_data['count']) && $cached_data['count'] == 50 && !isset($params['limit'])) {
+            $force_fresh = true;
+        }
+        
+        if ($cached_data !== false && !$force_fresh) {
             return $cached_data;
         }
         
@@ -308,16 +317,43 @@ class MardiGrasGlossary {
             $url .= '?' . http_build_query($params);
         }
         
-        $response = wp_remote_get($url);
+        // Increase timeout for larger requests
+        $timeout = isset($params['limit']) && $params['limit'] > 100 ? 30 : 15;
+        
+        $response = wp_remote_get($url, array(
+            'timeout' => $timeout,
+            'headers' => array(
+                'Accept' => 'application/json',
+                'User-Agent' => 'WordPress Mardi Gras Glossary Plugin v' . MGG_VERSION
+            )
+        ));
+        
         if (is_wp_error($response)) {
+            // Try to return cached data even if expired in case of API failure
+            $stale_cache = get_transient($cache_key . '_stale');
+            if ($stale_cache !== false) {
+                return $stale_cache;
+            }
             return array('terms' => array(), 'count' => 0);
         }
         
         $data = json_decode(wp_remote_retrieve_body($response), true);
+        if (!$data) {
+            return array('terms' => array(), 'count' => 0);
+        }
         
-        // Cache for 1 hour by default
+        // Cache for different durations based on request type
         $cache_duration = get_option('mgg_cache_duration', 3600);
+        
+        // Cache full term lists longer (2 hours)
+        if (isset($params['limit']) && $params['limit'] > 100) {
+            $cache_duration = 7200;
+        }
+        
         set_transient($cache_key, $data, $cache_duration);
+        
+        // Keep a stale copy for 24 hours as fallback
+        set_transient($cache_key . '_stale', $data, 86400);
         
         return $data;
     }
@@ -412,6 +448,17 @@ class MardiGrasGlossary {
     public function clear_all_cache() {
         global $wpdb;
         $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_mgg_%' OR option_name LIKE '_transient_timeout_mgg_%'");
+        
+        // Also clear any object cache if available
+        if (function_exists('wp_cache_flush')) {
+            wp_cache_flush();
+        }
+        
+        // Force a fresh API call by clearing specific caches
+        $patterns = array('mgg_terms_*', 'mgg_categories', 'mgg_term_*');
+        foreach ($patterns as $pattern) {
+            delete_transient(str_replace('*', '', $pattern));
+        }
     }
 }
 
@@ -438,7 +485,13 @@ function mgg_ajax_search_terms() {
     if ($category) $params['category'] = $category;
     if ($difficulty) $params['difficulty'] = $difficulty;
     if ($sort) $params['sort'] = $sort;
-    if ($limit) $params['limit'] = $limit;
+    
+    // If limit is 0, request a high number to get all terms
+    if ($limit == 0) {
+        $params['limit'] = 1000; // Get up to 1000 terms
+    } else {
+        $params['limit'] = $limit;
+    }
     
     $data = $glossary->fetch_terms($params);
     
