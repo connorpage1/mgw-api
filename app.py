@@ -580,7 +580,12 @@ def api_terms():
     query = request.args.get('search', '').strip()
     category_slug = request.args.get('category', '').strip()
     difficulty = request.args.get('difficulty', '').strip()
-    limit = min(max(request.args.get('limit', 50, type=int), 1), 100)
+    # Remove limit entirely - get all terms
+    limit_param = request.args.get('limit', type=int)
+    if limit_param and limit_param > 0:
+        limit = min(limit_param, 2000)  # Cap at 2000 for safety
+    else:
+        limit = None  # No limit
     
     # Build query
     terms_query = Term.query.join(Category).filter(
@@ -602,7 +607,10 @@ def api_terms():
         terms_query = terms_query.filter(Term.difficulty == difficulty)
     
     # Execute query
-    terms = terms_query.order_by(Term.term).limit(limit).all()
+    if limit:
+        terms = terms_query.order_by(Term.term).limit(limit).all()
+    else:
+        terms = terms_query.order_by(Term.term).all()
     
     return jsonify({
         'terms': [term.to_dict() for term in terms],
