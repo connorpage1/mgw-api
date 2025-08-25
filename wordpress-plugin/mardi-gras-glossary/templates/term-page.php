@@ -27,10 +27,10 @@ $categories = $categories_data['categories'] ?? array();
 
 // Get the glossary referrer URL for back navigation
 $referrer = wp_get_referer();
-$back_url = (strpos($referrer, '/mardi-gras-glossary') !== false) ? $referrer : home_url('/mardi-gras-glossary/');
+$back_url = (strpos($referrer, '/mardi-gras/glossary') !== false) ? $referrer : home_url('/mardi-gras/glossary/');
 
 // Build breadcrumbs
-$category_url = home_url('/mardi-gras-glossary/category/' . $term['category_slug'] . '/');
+$category_url = home_url('/mardi-gras/glossary/category/' . $term['category_slug'] . '/');
 ?>
 
 <div class="mgg-term-page">
@@ -39,7 +39,8 @@ $category_url = home_url('/mardi-gras-glossary/category/' . $term['category_slug
     <nav class="mgg-breadcrumbs" aria-label="Breadcrumb">
         <ol class="mgg-breadcrumb-list">
             <li><a href="<?php echo home_url(); ?>">Home</a></li>
-            <li><a href="<?php echo home_url('/mardi-gras-glossary/'); ?>">Mardi Gras Glossary</a></li>
+            <li><a href="<?php echo home_url('/mardi-gras/'); ?>">Mardi Gras</a></li>
+            <li><a href="<?php echo home_url('/mardi-gras/glossary/'); ?>">Glossary</a></li>
             <li><a href="<?php echo esc_url($category_url); ?>"><?php echo esc_html($term['category']); ?></a></li>
             <li class="mgg-current"><?php echo esc_html($term['term']); ?></li>
         </ol>
@@ -149,7 +150,7 @@ $category_url = home_url('/mardi-gras-glossary/category/' . $term['category_slug
                 <ul class="mgg-related-list">
                     <?php foreach ($term['related_terms'] as $related): ?>
                         <li>
-                            <a href="<?php echo home_url('/mardi-gras-glossary/' . $related['slug'] . '/'); ?>">
+                            <a href="<?php echo home_url('/mardi-gras/glossary/' . $related['slug'] . '/'); ?>">
                                 <?php echo esc_html($related['term']); ?>
                             </a>
                             <span class="mgg-related-category"><?php echo esc_html($related['category']); ?></span>
@@ -171,10 +172,10 @@ $category_url = home_url('/mardi-gras-glossary/category/' . $term['category_slug
         <section class="mgg-quick-nav">
             <h3>Quick Navigation</h3>
             <ul class="mgg-nav-list">
-                <li><a href="<?php echo home_url('/mardi-gras-glossary/'); ?>">All Terms</a></li>
+                <li><a href="<?php echo home_url('/mardi-gras/glossary/'); ?>">All Terms</a></li>
                 <?php foreach ($categories as $cat): ?>
                     <li>
-                        <a href="<?php echo home_url('/mardi-gras-glossary/category/' . $cat['slug'] . '/'); ?>">
+                        <a href="<?php echo home_url('/mardi-gras/glossary/category/' . $cat['slug'] . '/'); ?>">
                             <?php echo esc_html($cat['name']); ?> (<?php echo $cat['term_count']; ?>)
                         </a>
                     </li>
@@ -191,7 +192,7 @@ $category_url = home_url('/mardi-gras-glossary/category/' . $term['category_slug
         </a>
         
         <div class="mgg-nav-actions">
-            <a href="<?php echo home_url('/mardi-gras-glossary/'); ?>?search=<?php echo urlencode($term['term']); ?>" class="mgg-search-similar">
+            <a href="<?php echo home_url('/mardi-gras/glossary/'); ?>?search=<?php echo urlencode($term['term']); ?>" class="mgg-search-similar">
                 Search Similar Terms
             </a>
         </div>

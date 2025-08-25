@@ -7,10 +7,26 @@
    Base Styles & Inspiro Theme Compatibility
    ========================================================================== */
 
+:root {
+    --mgg-primary: #4a5568;     /* Inspiro-style dark blue-gray */
+    --mgg-secondary: #718096;   /* Medium gray */
+    --mgg-accent: #667eea;      /* Soft purple-blue */
+    --mgg-accent-hover: #5a67d8;
+    --mgg-light-bg: #f7fafc;    /* Very light blue-gray */
+    --mgg-border: #e2e8f0;      /* Light border */
+    --mgg-text: #2d3748;        /* Dark text */
+    --mgg-text-light: #4a5568;  /* Lighter text */
+    --mgg-white: #ffffff;
+    --mgg-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    --mgg-shadow-lg: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
 .mgg-container {
     max-width: 1200px;
     margin: 0 auto;
     padding: 0 20px;
+    position: relative;
+    z-index: 1;
 }
 
 /* Override Inspiro's default post styles for better glossary integration */
@@ -18,7 +34,23 @@
 .mgg-term-page {
     font-family: var(--inspiro-body-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
     line-height: 1.6;
-    color: var(--inspiro-text-color, #333);
+    color: var(--mgg-text);
+    position: relative;
+    z-index: 1;
+    background: transparent;
+    padding-top: 20px;
+    margin-top: 20px;
+}
+
+/* Ensure no background elements appear */
+.mgg-main-glossary::before,
+.mgg-main-glossary::after {
+    display: none !important;
+}
+
+/* Fix any potential overlay issues */
+.mgg-main-glossary * {
+    position: relative;
 }
 
 /* =============================================================================
@@ -26,14 +58,18 @@
    ========================================================================== */
 
 .mgg-hero-section {
-    background: linear-gradient(135deg, #6f42c1 0%, #e83e8c 100%);
-    color: white;
+    background: #f8fafc !important;
+    color: #1f2937 !important;
     text-align: center;
-    padding: 60px 20px;
-    margin-bottom: 40px;
-    border-radius: 12px;
+    padding: 40px 20px;
+    margin: 0 0 40px 0;
+    border-radius: 16px;
     position: relative;
     overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08) !important;
+    z-index: 10;
+    clear: both;
+    border: 1px solid #e5e7eb !important;
 }
 
 .mgg-hero-section::before {
@@ -44,7 +80,7 @@
     right: 0;
     bottom: 0;
     background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="carnival" patternUnits="userSpaceOnUse" width="20" height="20"><circle cx="10" cy="10" r="1" fill="rgba(255,255,255,0.1)"/></pattern></defs><rect width="100" height="100" fill="url(%23carnival)"/></svg>');
-    opacity: 0.3;
+    opacity: 0.2;
 }
 
 .mgg-hero-content {
@@ -53,163 +89,374 @@
 }
 
 .mgg-main-title {
-    font-size: 2.5rem;
-    font-weight: 700;
-    margin: 0 0 15px 0;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    font-size: 2.2rem !important;
+    font-weight: 700 !important;
+    margin: 0 0 15px 0 !important;
+    text-shadow: none !important;
+    position: relative;
+    z-index: 2;
+    color: #1f2937 !important;
 }
 
 .mgg-hero-subtitle {
-    font-size: 1.1rem;
-    margin: 0;
-    opacity: 0.9;
+    font-size: 1.1rem !important;
+    margin: 0 auto !important;
+    opacity: 0.8 !important;
     max-width: 600px;
-    margin: 0 auto;
+    color: #6b7280 !important;
+}
+
+/* Simple page header when hero is disabled */
+.mgg-page-header {
+    text-align: center;
+    padding: 40px 20px 30px 20px;
+    margin: 20px 0 30px 0;
+    clear: both;
+}
+
+.mgg-simple-title {
+    font-size: 2.2rem;
+    font-weight: 700;
+    margin: 0;
+    color: var(--mgg-text);
+    position: relative;
+    z-index: 10;
 }
 
 /* =============================================================================
-   Controls Section
+   Main Content Layout
    ========================================================================== */
 
-.mgg-controls-section {
-    background: var(--inspiro-bg-light, #f8f9fa);
-    padding: 30px;
-    border-radius: 12px;
-    margin-bottom: 30px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+.mgg-main-content {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 40px;
+    margin-top: 0;
 }
 
-/* Search Bar */
-.mgg-search-bar {
+/* =============================================================================
+   Sidebar Styles
+   ========================================================================== */
+
+.mgg-sidebar {
     display: flex;
-    margin-bottom: 20px;
-    max-width: 500px;
-    margin-left: auto;
-    margin-right: auto;
+    flex-direction: column;
+    gap: 30px;
+}
+
+.mgg-sidebar-section {
+    background: var(--mgg-white);
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: var(--mgg-shadow);
+    border: 1px solid var(--mgg-border);
+}
+
+.mgg-sidebar-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--mgg-text);
+    margin: 0 0 20px 0;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--mgg-border);
+}
+
+/* Search Container */
+.mgg-search-container {
+    position: relative;
+    margin-bottom: 24px;
 }
 
 .mgg-search-field {
-    flex: 1;
+    width: 100%;
     padding: 12px 16px;
-    border: 2px solid #dee2e6;
-    border-radius: 25px 0 0 25px;
-    font-size: 16px;
+    padding-right: 45px;
+    border: 2px solid var(--mgg-border);
+    border-radius: 8px;
+    font-size: 14px;
+    background: var(--mgg-white);
     outline: none;
-    transition: border-color 0.3s ease;
+    transition: all 0.3s ease;
+    box-sizing: border-box;
 }
 
 .mgg-search-field:focus {
-    border-color: var(--inspiro-accent-color, #6f42c1);
-    box-shadow: 0 0 0 3px rgba(111, 66, 193, 0.1);
+    border-color: var(--mgg-accent);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
-.mgg-search-button {
-    padding: 12px 20px;
-    background: var(--inspiro-accent-color, #6f42c1);
+.mgg-search-btn {
+    position: absolute;
+    right: 4px;
+    top: 4px;
+    bottom: 4px;
+    width: 36px;
+    background: #4f46e5;
     color: white;
     border: none;
-    border-radius: 0 25px 25px 0;
+    border-radius: 6px;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     transition: background-color 0.3s ease;
 }
 
-.mgg-search-button:hover {
-    background: var(--inspiro-accent-hover, #5a359a);
+.mgg-search-btn:hover {
+    background: #4338ca;
 }
 
 .mgg-search-icon {
-    font-size: 16px;
+    width: 16px;
+    height: 16px;
+    position: relative;
+    display: inline-block;
+}
+
+.mgg-search-icon::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 10px;
+    height: 10px;
+    border: 2px solid currentColor;
+    border-radius: 50%;
+}
+
+.mgg-search-icon::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 2px;
+    height: 6px;
+    background: currentColor;
+    transform: rotate(45deg);
+    border-radius: 1px;
 }
 
 /* Filters */
 .mgg-filters {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    display: flex;
+    flex-direction: column;
     gap: 20px;
-    margin-bottom: 20px;
 }
 
-.mgg-filter-group {
+.mgg-filter-item {
     display: flex;
     flex-direction: column;
 }
 
-.mgg-filter-group label {
+.mgg-filter-label {
     font-weight: 600;
     margin-bottom: 8px;
-    color: var(--inspiro-text-dark, #2c3e50);
+    color: var(--mgg-text);
     font-size: 14px;
 }
 
 .mgg-filter-select {
     padding: 10px 12px;
-    border: 2px solid #dee2e6;
+    border: 2px solid var(--mgg-border);
     border-radius: 8px;
-    background: white;
+    background: var(--mgg-white);
+    color: var(--mgg-text);
     font-size: 14px;
     cursor: pointer;
-    transition: border-color 0.3s ease;
+    transition: all 0.3s ease;
 }
 
 .mgg-filter-select:focus {
     outline: none;
-    border-color: var(--inspiro-accent-color, #6f42c1);
+    border-color: var(--mgg-accent);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.mgg-clear-btn {
+    padding: 10px 16px;
+    background: transparent;
+    color: var(--mgg-secondary);
+    border: 2px solid var(--mgg-border);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    margin-top: 4px;
+}
+
+.mgg-clear-btn:hover {
+    background: var(--mgg-light-bg);
+    border-color: var(--mgg-secondary);
+    color: var(--mgg-text);
+}
+
+/* Stats List */
+.mgg-stats-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.mgg-stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--mgg-border);
+}
+
+.mgg-stat-item:last-child {
+    border-bottom: none;
+}
+
+.mgg-stat-number {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--mgg-accent);
+}
+
+.mgg-stat-label {
+    font-size: 0.9rem;
+    color: var(--mgg-text-light);
+}
+
+/* Categories List */
+.mgg-category-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.mgg-category-item {
+    margin: 0;
+}
+
+.mgg-category-link {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--mgg-light-bg);
+    border: 1px solid var(--mgg-border);
+    border-radius: 8px;
+    text-decoration: none;
+    color: var(--mgg-text);
+    transition: all 0.3s ease;
+}
+
+.mgg-category-link:hover {
+    background: var(--mgg-white);
+    border-color: var(--mgg-accent);
+    color: var(--mgg-text);
+    transform: translateY(-1px);
+    box-shadow: var(--mgg-shadow);
+}
+
+.mgg-category-name {
+    font-weight: 500;
+}
+
+.mgg-category-count {
+    background: var(--mgg-accent);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    min-width: 20px;
+    text-align: center;
+}
+
+/* =============================================================================
+   Main Content Area
+   ========================================================================== */
+
+.mgg-content {
+    min-width: 0; /* Prevents overflow */
+}
+
+.mgg-results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding: 16px 20px;
+    background: var(--mgg-white);
+    border-radius: 12px;
+    box-shadow: var(--mgg-shadow);
+    border: 1px solid var(--mgg-border);
+}
+
+.mgg-results-info {
+    color: var(--mgg-text-light);
+    font-size: 0.9rem;
+}
+
+.mgg-results-info strong {
+    color: var(--mgg-text);
+    font-weight: 600;
 }
 
 /* View Controls */
 .mgg-view-controls {
     display: flex;
-    justify-content: center;
-    gap: 10px;
+    gap: 8px;
 }
 
 .mgg-view-btn {
-    padding: 8px 16px;
-    border: 2px solid #dee2e6;
-    background: white;
+    padding: 8px 10px;
+    border: 2px solid var(--mgg-border);
+    background: var(--mgg-white);
     border-radius: 8px;
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 5px;
-    font-size: 14px;
+    justify-content: center;
+    font-size: 16px;
     transition: all 0.3s ease;
+    width: 40px;
+    height: 40px;
 }
 
 .mgg-view-btn:hover {
-    border-color: var(--inspiro-accent-color, #6f42c1);
-    color: var(--inspiro-accent-color, #6f42c1);
+    border-color: var(--mgg-accent);
+    color: var(--mgg-accent);
 }
 
 .mgg-view-btn.mgg-view-active {
-    background: var(--inspiro-accent-color, #6f42c1);
+    background: var(--mgg-accent);
     color: white;
-    border-color: var(--inspiro-accent-color, #6f42c1);
+    border-color: var(--mgg-accent);
 }
 
-/* =============================================================================
-   Results Info
-   ========================================================================== */
-
-.mgg-results-info {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 30px;
-    padding: 0 10px;
-}
-
+/* Loading Indicator */
 .mgg-loading {
     display: flex;
+    justify-content: center;
+    padding: 40px 20px;
+    background: var(--mgg-white);
+    border-radius: 12px;
+    box-shadow: var(--mgg-shadow);
+    border: 1px solid var(--mgg-border);
+    margin-bottom: 24px;
+}
+
+.mgg-loading-content {
+    display: flex;
     align-items: center;
-    gap: 10px;
-    color: var(--inspiro-accent-color, #6f42c1);
+    gap: 12px;
+    color: var(--mgg-accent);
     font-weight: 500;
 }
 
 .mgg-spinner {
     display: inline-block;
     animation: mgg-spin 1s linear infinite;
+    font-size: 1.2rem;
 }
 
 @keyframes mgg-spin {
@@ -217,43 +464,117 @@
     to { transform: rotate(360deg); }
 }
 
+/* Searching state animation */
+.mgg-searching {
+    opacity: 0.7;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.mgg-searching .mgg-term-card {
+    transform: scale(0.98);
+    transition: transform 0.3s ease;
+}
+
+/* Fade in animation for new cards */
+@keyframes mgg-fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.mgg-term-card {
+    animation: mgg-fadeIn 0.4s ease forwards;
+}
+
+/* Staggered animation delay for initial load */
+.mgg-term-card:nth-child(1) { animation-delay: 0.1s; }
+.mgg-term-card:nth-child(2) { animation-delay: 0.15s; }
+.mgg-term-card:nth-child(3) { animation-delay: 0.2s; }
+.mgg-term-card:nth-child(4) { animation-delay: 0.25s; }
+.mgg-term-card:nth-child(5) { animation-delay: 0.3s; }
+.mgg-term-card:nth-child(6) { animation-delay: 0.35s; }
+
+/* Smooth height transitions */
+.mgg-terms-grid,
+.mgg-terms-list {
+    transition: all 0.3s ease;
+}
+
+/* Hover effects for interactive elements */
+.mgg-filter-select:hover {
+    border-color: var(--mgg-accent);
+}
+
+.mgg-search-field:hover {
+    border-color: var(--mgg-accent);
+}
+
+/* Focus improvements */
+.mgg-search-field:focus,
+.mgg-filter-select:focus,
+.mgg-view-btn:focus,
+.mgg-clear-btn:focus,
+.mgg-load-more-btn:focus {
+    outline: 2px solid var(--mgg-accent);
+    outline-offset: 2px;
+}
+
+/* Remove complex animations that might cause visual issues */
+
 /* =============================================================================
    Terms Display - Grid View
    ========================================================================== */
 
 .mgg-terms-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-    gap: 30px;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 24px;
     margin-bottom: 40px;
 }
 
 .mgg-term-card {
-    background: white;
-    border-radius: 12px;
-    padding: 25px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-    border: 1px solid #f0f0f0;
+    background: #ffffff !important;
+    border-radius: 8px !important;
+    padding: 20px !important;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08) !important;
+    transition: all 0.3s ease !important;
+    border: 1px solid #e2e8f0 !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+/* Force white background for all card variations */
+.mgg-term-card,
+.mgg-term-card.mgg-difficulty-tourist,
+.mgg-term-card.mgg-difficulty-local,
+.mgg-term-card.mgg-difficulty-expert {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    border-color: #e2e8f0 !important;
 }
 
 .mgg-term-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12) !important;
+    border-color: #cbd5e1 !important;
+    background: #ffffff !important;
 }
 
-/* Difficulty-based styling */
-.mgg-term-card.mgg-difficulty-tourist {
-    border-left: 4px solid #28a745;
+.mgg-term-card::before {
+    display: none;
 }
 
-.mgg-term-card.mgg-difficulty-local {
-    border-left: 4px solid #ffc107;
+.mgg-term-card:hover::before {
+    display: none;
 }
 
-.mgg-term-card.mgg-difficulty-expert {
-    border-left: 4px solid #dc3545;
-}
+/* Uniform card styling - all cards same color - disabled */
 
 /* =============================================================================
    Terms Display - List View
@@ -291,18 +612,18 @@
 
 .mgg-term-title {
     margin: 0 0 10px 0;
-    font-size: 1.4rem;
-    font-weight: 600;
+    font-size: 1.6rem;
+    font-weight: 700;
 }
 
 .mgg-term-link {
-    color: var(--inspiro-heading-color, #2c3e50);
+    color: var(--mgg-text);
     text-decoration: none;
     transition: color 0.3s ease;
 }
 
 .mgg-term-link:hover {
-    color: var(--inspiro-accent-color, #6f42c1);
+    color: var(--mgg-accent);
 }
 
 .mgg-term-meta {
@@ -313,8 +634,9 @@
 
 .mgg-term-pronunciation {
     font-style: italic;
-    color: #6c757d;
+    color: var(--mgg-text-light);
     font-size: 0.9rem;
+    font-family: 'Georgia', serif;
 }
 
 .mgg-term-badges {
@@ -326,45 +648,53 @@
 .mgg-category-badge,
 .mgg-difficulty-badge,
 .mgg-featured-badge {
-    padding: 4px 12px;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    font-weight: 500;
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 0.75rem;
+    font-weight: 600;
     text-decoration: none;
-    transition: opacity 0.3s ease;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
 }
 
 .mgg-category-badge {
-    background: var(--inspiro-accent-light, #e8d5f0);
-    color: var(--inspiro-accent-color, #6f42c1);
+    background: rgba(102, 126, 234, 0.1);
+    color: var(--mgg-accent);
+    border: 1px solid rgba(102, 126, 234, 0.2);
 }
 
 .mgg-category-badge:hover {
-    opacity: 0.8;
-    color: var(--inspiro-accent-color, #6f42c1);
+    background: rgba(102, 126, 234, 0.15);
+    color: var(--mgg-accent);
 }
 
 .mgg-difficulty-badge {
     color: white;
     font-weight: 600;
+    border: none;
 }
 
+/* Difficulty-specific colors for badges only */
 .mgg-difficulty-tourist {
-    background: #28a745;
+    background: #10b981; /* Green for tourist */
+    color: white;
 }
 
 .mgg-difficulty-local {
-    background: #ffc107;
-    color: #212529 !important;
+    background: #f59e0b; /* Orange for local */
+    color: white;
 }
 
 .mgg-difficulty-expert {
-    background: #dc3545;
+    background: #dc2626; /* Red for expert */
+    color: white;
 }
 
 .mgg-featured-badge {
-    background: #fd7e14;
-    color: white;
+    background: linear-gradient(135deg, #fbb6ce, #f687b3);
+    color: #702459;
+    font-weight: 600;
 }
 
 /* Term Content */
@@ -373,22 +703,22 @@
 }
 
 .mgg-term-definition {
-    color: var(--inspiro-text-color, #555);
+    color: var(--mgg-text-light);
     line-height: 1.6;
     margin-bottom: 15px;
 }
 
 .mgg-term-example {
     padding: 12px;
-    background: #f8f9fa;
+    background: var(--mgg-light-bg);
     border-radius: 8px;
     font-size: 0.9rem;
-    color: #495057;
-    border-left: 3px solid var(--inspiro-accent-color, #6f42c1);
+    color: var(--mgg-text-light);
+    border-left: 3px solid var(--mgg-accent);
 }
 
 .mgg-term-example strong {
-    color: var(--inspiro-accent-color, #6f42c1);
+    color: var(--mgg-accent);
 }
 
 /* Term Footer */
@@ -396,7 +726,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-top: 1px solid #f0f0f0;
+    border-top: 1px solid var(--mgg-border);
     padding-top: 15px;
 }
 
@@ -405,7 +735,7 @@
     gap: 15px;
     align-items: center;
     font-size: 0.85rem;
-    color: #6c757d;
+    color: var(--mgg-text-light);
 }
 
 .mgg-view-count,
@@ -416,15 +746,20 @@
 }
 
 .mgg-read-more {
-    color: var(--inspiro-accent-color, #6f42c1);
+    color: var(--mgg-accent);
     text-decoration: none;
     font-weight: 500;
     font-size: 0.9rem;
-    transition: color 0.3s ease;
+    transition: all 0.3s ease;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid transparent;
 }
 
 .mgg-read-more:hover {
-    color: var(--inspiro-accent-hover, #5a359a);
+    color: var(--mgg-accent-hover);
+    background: rgba(102, 126, 234, 0.05);
+    border-color: rgba(102, 126, 234, 0.2);
 }
 
 /* =============================================================================
@@ -778,19 +1113,26 @@
 }
 
 .mgg-load-more-btn {
-    padding: 15px 30px;
-    background: var(--inspiro-accent-color, #6f42c1);
+    padding: 16px 32px;
+    background: var(--mgg-accent);
     color: white;
     border: none;
-    border-radius: 8px;
+    border-radius: 12px;
     font-size: 1rem;
     font-weight: 500;
     cursor: pointer;
-    transition: background-color 0.3s ease;
+    transition: all 0.3s ease;
+    box-shadow: var(--mgg-shadow);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
 }
 
 .mgg-load-more-btn:hover:not(:disabled) {
-    background: var(--inspiro-accent-hover, #5a359a);
+    background: var(--mgg-accent-hover);
+    transform: translateY(-2px);
+    box-shadow: var(--mgg-shadow-lg);
 }
 
 .mgg-load-more-btn:disabled {
@@ -798,38 +1140,59 @@
     cursor: not-allowed;
 }
 
+.mgg-load-more-count {
+    font-size: 0.8rem;
+    font-weight: 400;
+    opacity: 0.8;
+}
+
 .mgg-no-results,
 .mgg-error-message {
+    background: var(--mgg-white);
+    border-radius: 12px;
+    margin: 24px 0;
+    box-shadow: var(--mgg-shadow);
+    border: 1px solid var(--mgg-border);
+}
+
+.mgg-no-results-content {
     text-align: center;
     padding: 60px 20px;
-    background: #f8f9fa;
-    border-radius: 12px;
-    margin: 40px 0;
 }
 
 .mgg-no-results h3,
 .mgg-error-message h3 {
-    color: var(--inspiro-heading-color, #2c3e50);
+    color: var(--mgg-text);
     margin-bottom: 15px;
-    font-size: 1.5rem;
+    font-size: 1.3rem;
+    font-weight: 600;
 }
 
-.mgg-clear-filters,
+.mgg-no-results p,
+.mgg-error-message p {
+    color: var(--mgg-text-light);
+    margin-bottom: 20px;
+}
+
+.mgg-no-results .mgg-clear-btn,
 .mgg-retry-btn {
     margin-top: 20px;
-    padding: 10px 20px;
-    background: var(--inspiro-accent-color, #6f42c1);
+    padding: 12px 24px;
+    background: var(--mgg-accent);
     color: white;
     border: none;
     border-radius: 8px;
     cursor: pointer;
     font-weight: 500;
-    transition: background-color 0.3s ease;
+    transition: all 0.3s ease;
+    box-shadow: var(--mgg-shadow);
 }
 
-.mgg-clear-filters:hover,
+.mgg-no-results .mgg-clear-btn:hover,
 .mgg-retry-btn:hover {
-    background: var(--inspiro-accent-hover, #5a359a);
+    background: var(--mgg-accent-hover);
+    transform: translateY(-1px);
+    box-shadow: var(--mgg-shadow-lg);
 }
 
 /* =============================================================================
@@ -847,38 +1210,56 @@
     }
 }
 
+@media (max-width: 1024px) {
+    .mgg-main-content {
+        grid-template-columns: 240px 1fr;
+        gap: 30px;
+    }
+}
+
 @media (max-width: 768px) {
     .mgg-container {
         padding: 0 15px;
     }
     
     .mgg-hero-section {
-        padding: 40px 20px;
-        margin-bottom: 30px;
+        padding: 30px 15px;
+        margin: 10px 0 30px 0;
     }
     
     .mgg-main-title {
-        font-size: 2rem;
+        font-size: 1.8rem;
     }
     
-    .mgg-controls-section {
-        padding: 20px;
-    }
-    
-    .mgg-filters {
+    .mgg-main-content {
         grid-template-columns: 1fr;
+        gap: 20px;
+    }
+    
+    .mgg-sidebar {
+        order: 1;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+    
+    .mgg-sidebar-section:nth-child(3) {
+        grid-column: 1 / -1;
+    }
+    
+    .mgg-content {
+        order: 0;
+    }
+    
+    .mgg-results-header {
+        flex-direction: column;
         gap: 15px;
+        text-align: center;
+        padding: 16px;
     }
     
     .mgg-view-controls {
         justify-content: center;
-        margin-top: 20px;
-    }
-    
-    .mgg-results-info {
-        flex-direction: column;
-        gap: 15px;
-        text-align: center;
     }
     
     .mgg-terms-grid {
@@ -894,42 +1275,15 @@
     .mgg-terms-list .mgg-term-footer {
         margin-left: 0;
     }
-    
-    .mgg-term-page .mgg-term-title {
-        font-size: 2rem;
-    }
-    
-    .mgg-navigation-top {
-        flex-direction: column;
-        gap: 15px;
-        align-items: stretch;
-    }
-    
-    .mgg-share-buttons {
-        justify-content: center;
-    }
-    
-    .mgg-term-stats {
-        flex-direction: column;
-        gap: 15px;
-    }
-    
-    .mgg-term-navigation {
-        flex-direction: column;
-        gap: 15px;
-        align-items: stretch;
-    }
 }
 
 @media (max-width: 480px) {
-    .mgg-search-bar {
-        flex-direction: column;
-        gap: 10px;
+    .mgg-sidebar {
+        grid-template-columns: 1fr;
     }
     
-    .mgg-search-field,
-    .mgg-search-button {
-        border-radius: 8px;
+    .mgg-sidebar-section {
+        padding: 20px;
     }
     
     .mgg-term-card {
@@ -939,6 +1293,7 @@
     .mgg-term-badges {
         flex-direction: column;
         align-items: flex-start;
+        gap: 8px;
     }
     
     .mgg-term-footer {
@@ -950,6 +1305,34 @@
     .mgg-breadcrumb-list {
         flex-wrap: wrap;
         gap: 5px;
+    }
+    
+    .mgg-load-more-btn {
+        padding: 14px 24px;
+        font-size: 0.9rem;
+    }
+    
+    .mgg-hero-section {
+        border-radius: 12px;
+    }
+    
+    .mgg-sidebar-section {
+        padding: 16px;
+    }
+}
+
+/* Extra small devices */
+@media (max-width: 320px) {
+    .mgg-main-title {
+        font-size: 1.8rem;
+    }
+    
+    .mgg-term-card {
+        padding: 16px;
+    }
+    
+    .mgg-results-header {
+        padding: 12px;
     }
 }
 
@@ -980,24 +1363,154 @@
     border: 0;
 }
 
+/* Keyboard navigation improvements */
+.mgg-term-link:focus {
+    outline: 2px solid var(--mgg-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+.mgg-category-link:focus {
+    outline: 2px solid var(--mgg-accent);
+    outline-offset: 2px;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    :root {
+        --mgg-border: #000000;
+        --mgg-text-light: #000000;
+        --mgg-accent: #0000ff;
+    }
+    
+    .mgg-term-card {
+        border: 2px solid var(--mgg-border);
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+    
+    .mgg-term-card:hover {
+        transform: none;
+    }
+    
+    .mgg-load-more-btn:hover {
+        transform: none;
+    }
+}
+
 /* Print styles */
 @media print {
-    .mgg-controls-section,
-    .mgg-navigation-top,
-    .mgg-term-navigation,
+    .mgg-sidebar,
+    .mgg-results-header,
     .mgg-load-more-container {
-        display: none;
+        display: none !important;
+    }
+    
+    .mgg-main-content {
+        grid-template-columns: 1fr !important;
     }
     
     .mgg-term-card {
         break-inside: avoid;
         box-shadow: none;
         border: 1px solid #ccc;
+        margin-bottom: 20px;
     }
     
     .mgg-hero-section {
-        background: none;
-        color: #333;
+        background: none !important;
+        color: #333 !important;
         border: 1px solid #ccc;
+        padding: 20px !important;
     }
+    
+    .mgg-terms-grid {
+        grid-template-columns: 1fr !important;
+        gap: 20px !important;
+    }
+    
+    .mgg-term-link {
+        color: #000 !important;
+        text-decoration: underline !important;
+    }
+    
+    /* Add term URLs for print */
+    .mgg-term-link::after {
+        content: ' (' attr(href) ')';
+        font-size: 0.8em;
+        color: #666;
+    }
+}
+
+/* =============================================================================
+   AGGRESSIVE OVERRIDES - Force white cards and remove all blue styling
+   ========================================================================== */
+
+/* Force white background on all term cards */
+.mgg-term-card,
+article.mgg-term-card,
+.mgg-terms-grid .mgg-term-card,
+.mgg-terms-list .mgg-term-card {
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+}
+
+/* But allow difficulty badges to keep their colors */
+.mgg-difficulty-badge {
+    background: unset !important;
+}
+
+.mgg-difficulty-tourist {
+    background: #10b981 !important;
+    color: white !important;
+}
+
+.mgg-difficulty-local {
+    background: #f59e0b !important;
+    color: white !important;
+}
+
+.mgg-difficulty-expert {
+    background: #dc2626 !important;
+    color: white !important;
+}
+
+/* Remove any blue borders or accents */
+.mgg-term-card {
+    border: 1px solid #e5e7eb !important;
+    border-left: 1px solid #e5e7eb !important;
+    border-top: none !important;
+}
+
+/* Hide view counts completely */
+.mgg-view-count,
+.mgg-views-icon,
+span.mgg-view-count,
+.mgg-term-stats .mgg-view-count {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+}
+
+/* Remove any ::before pseudo-elements that might add colors */
+.mgg-term-card::before {
+    display: none !important;
+    content: none !important;
+}
+
+/* Ensure term titles are larger */
+.mgg-term-title {
+    font-size: 1.8rem !important;
+    font-weight: 700 !important;
+    color: #1f2937 !important;
 }

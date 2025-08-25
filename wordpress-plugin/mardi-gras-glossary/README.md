@@ -98,10 +98,10 @@ Add the glossary to any page or post:
 #### Option 2: Direct URLs
 The plugin automatically creates these URLs:
 
-- **Main Glossary**: `/mardi-gras-glossary/`
-- **Category Pages**: `/mardi-gras-glossary/category/krewes/`
-- **Individual Terms**: `/mardi-gras-glossary/king-cake/`
-- **Search Results**: `/mardi-gras-glossary/?search=parade`
+- **Main Glossary**: `/mardi-gras/glossary/`
+- **Category Pages**: `/mardi-gras/glossary/category/krewes/`
+- **Individual Terms**: `/mardi-gras/glossary/king-cake/`
+- **Search Results**: `/mardi-gras/glossary/?search=parade`
 
 ## Features in Detail
 
@@ -262,6 +262,7 @@ jQuery(document).on('mgg_filter_change', function(e, filters) {
 1. Go to Settings > Permalinks
 2. Click "Save Changes" (flushes rewrite rules)
 3. Test URLs again
+4. Ensure no other plugin conflicts with /mardi-gras/ URLs
 ```
 
 **Styling issues:**

@@ -32,7 +32,7 @@ if (isset($_POST['clear_cache'])) {
 }
 
 // Get current settings
-$api_url = get_option('mgg_api_url', 'https://your-mardi-gras-api.railway.app');
+$api_url = get_option('mgg_api_url', 'https://api.mardigrasworld.com');
 $cache_duration = get_option('mgg_cache_duration', 3600);
 $sync_frequency = get_option('mgg_sync_frequency', 'hourly');
 
@@ -43,7 +43,22 @@ $api_working = !empty($api_test['categories']);
 ?>
 
 <div class="wrap">
-    <h1>Mardi Gras Glossary Settings</h1>
+    <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
+    
+    <div class="mgg-admin-header">
+        <div class="mgg-admin-title">
+            <h1>🎭 Mardi Gras Glossary</h1>
+            <p class="mgg-version">Version 1.1.7 by Connor Page</p>
+        </div>
+        <div class="mgg-admin-links">
+            <a href="https://github.com/your-username/mardi-gras-glossary#readme" target="_blank" class="button button-secondary">
+                📖 Documentation
+            </a>
+            <a href="<?php echo home_url('/mardi-gras/glossary/'); ?>" target="_blank" class="button button-secondary">
+                🔗 View Glossary
+            </a>
+        </div>
+    </div>
     
     <!-- API Status -->
     <div class="card">
@@ -57,7 +72,7 @@ $api_working = !empty($api_test['categories']);
             <?php else: ?>
                 <span style="color: red; font-weight: bold;">✗ Connection Failed</span>
                 <br>
-                <small>Unable to connect to the API. Please check your API URL and ensure the service is running.</small>
+                <small>Unable to connect to <?php echo esc_html($api_url); ?>. Please check your API URL and ensure the service is running.</small>
             <?php endif; ?>
         </p>
     </div>
@@ -144,9 +159,9 @@ $api_working = !empty($api_test['categories']);
         <h3>Method 2: Direct URL</h3>
         <p>The plugin automatically creates these URLs on your site:</p>
         <ul>
-            <li><strong>Main Glossary:</strong> <code><?php echo home_url('/mardi-gras-glossary/'); ?></code></li>
-            <li><strong>Category Pages:</strong> <code><?php echo home_url('/mardi-gras-glossary/category/krewes/'); ?></code></li>
-            <li><strong>Individual Terms:</strong> <code><?php echo home_url('/mardi-gras-glossary/king-cake/'); ?></code></li>
+            <li><strong>Main Glossary:</strong> <code><?php echo home_url('/mardi-gras/glossary/'); ?></code></li>
+            <li><strong>Category Pages:</strong> <code><?php echo home_url('/mardi-gras/glossary/category/krewes/'); ?></code></li>
+            <li><strong>Individual Terms:</strong> <code><?php echo home_url('/mardi-gras/glossary/king-cake/'); ?></code></li>
         </ul>
         
         <h3>Search Engine Optimization</h3>
@@ -164,12 +179,12 @@ $api_working = !empty($api_test['categories']);
     <div class="card">
         <h2>Current Statistics</h2>
         <?php
-        $stats = $glossary->fetch_terms(array('limit' => 1));
+        $stats = $glossary->fetch_terms(array());
         $categories = count($api_test['categories']);
         $total_terms = 0;
         
         // Get total count from API
-        $all_terms = $glossary->fetch_terms(array('limit' => 1000)); // High limit to get count
+        $all_terms = $glossary->fetch_terms(array()); // Get all terms
         $total_terms = count($all_terms['terms'] ?? array());
         ?>
         <p>
@@ -212,17 +227,61 @@ $api_working = !empty($api_test['categories']);
 </div>
 
 <style>
+.mgg-admin-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 30px;
+    padding: 20px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    border-left: 4px solid #667eea;
+}
+
+.mgg-admin-title h1 {
+    margin: 0 0 5px 0;
+    color: #2c3e50;
+    font-size: 24px;
+}
+
+.mgg-version {
+    margin: 0;
+    color: #718096;
+    font-size: 14px;
+}
+
+.mgg-admin-links {
+    display: flex;
+    gap: 10px;
+}
+
+.mgg-admin-links .button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-decoration: none;
+}
+
 .card {
     background: white;
-    border: 1px solid #ccd0d4;
-    border-radius: 4px;
-    padding: 20px;
+    border: 1px solid #e1e5e9;
+    border-radius: 8px;
+    padding: 24px;
     margin: 20px 0;
-    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+    box-shadow: 0 1px 3px rgba(0,0,0,.1);
+    transition: box-shadow 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: 0 4px 6px rgba(0,0,0,.1);
 }
 
 .card h2 {
     margin-top: 0;
+    color: #2c3e50;
+    border-bottom: 2px solid #f7fafc;
+    padding-bottom: 10px;
 }
 
 code {

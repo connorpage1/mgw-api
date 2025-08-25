@@ -13,31 +13,46 @@ $glossary = new MardiGrasGlossary();
 $categories_data = $glossary->fetch_categories();
 $categories = $categories_data['categories'] ?? array();
 
-// Find the current category
+// Find the current category - try both slug and name matching
 $current_category = null;
 foreach ($categories as $cat) {
-    if ($cat['slug'] === $category) {
+    if ($cat['slug'] === $category || sanitize_title($cat['name']) === $category) {
         $current_category = $cat;
         break;
     }
 }
 
+// If still not found, create a fallback category
 if (!$current_category) {
-    // 404 - Category not found
-    global $wp_query;
-    $wp_query->set_404();
-    status_header(404);
-    include get_404_template();
-    return;
+    // Try to get terms for this category anyway
+    $terms_data = $glossary->fetch_terms(array('category' => $category, 'limit' => 100));
+    $terms = $terms_data['terms'] ?? array();
+    
+    if (!empty($terms)) {
+        // Create a fallback category from the first term
+        $current_category = array(
+            'name' => $terms[0]['category'] ?? ucwords(str_replace('-', ' ', $category)),
+            'slug' => $category,
+            'description' => 'Terms in this category'
+        );
+    } else {
+        // 404 - Category not found and no terms
+        global $wp_query;
+        $wp_query->set_404();
+        status_header(404);
+        include get_404_template();
+        return;
+    }
+} else {
+    // Get terms for this category
+    $terms_data = $glossary->fetch_terms(array('category' => $category, 'limit' => 100));
+    $terms = $terms_data['terms'] ?? array();
 }
 
-// Get terms for this category
-$terms_data = $glossary->fetch_terms(array('category' => $category, 'limit' => 100));
-$terms = $terms_data['terms'] ?? array();
 $total_count = count($terms);
 
 // Build breadcrumbs
-$glossary_url = home_url('/mardi-gras-glossary/');
+$glossary_url = home_url('/mardi-gras/glossary/');
 ?>
 
 <div class="mgg-category-page">
@@ -46,7 +61,8 @@ $glossary_url = home_url('/mardi-gras-glossary/');
     <nav class="mgg-breadcrumbs" aria-label="Breadcrumb">
         <ol class="mgg-breadcrumb-list">
             <li><a href="<?php echo home_url(); ?>">Home</a></li>
-            <li><a href="<?php echo esc_url($glossary_url); ?>">Mardi Gras Glossary</a></li>
+            <li><a href="<?php echo home_url('/mardi-gras/'); ?>">Mardi Gras</a></li>
+            <li><a href="<?php echo esc_url($glossary_url); ?>">Glossary</a></li>
             <li class="mgg-current"><?php echo esc_html($current_category['name']); ?></li>
         </ol>
     </nav>
@@ -79,7 +95,7 @@ $glossary_url = home_url('/mardi-gras-glossary/');
                    placeholder="Search within <?php echo esc_attr($current_category['name']); ?>..." 
                    class="mgg-search-field">
             <button id="mgg-category-search-btn" class="mgg-search-button">
-                <span class="mgg-search-icon">🔍</span>
+                <span class="mgg-search-icon"></span>
             </button>
         </div>
         
@@ -170,7 +186,7 @@ $glossary_url = home_url('/mardi-gras-glossary/');
                 <div class="mgg-category-links">
                     <?php foreach ($categories as $cat): ?>
                         <?php if ($cat['slug'] !== $category): ?>
-                            <a href="<?php echo home_url('/mardi-gras-glossary/category/' . $cat['slug'] . '/'); ?>" 
+                            <a href="<?php echo home_url('/mardi-gras/glossary/category/' . $cat['slug'] . '/'); ?>" 
                                class="mgg-category-link">
                                 <span class="mgg-category-name"><?php echo esc_html($cat['name']); ?></span>
                                 <span class="mgg-category-count"><?php echo $cat['term_count']; ?> terms</span>
@@ -287,7 +303,7 @@ jQuery(document).ready(function($) {
     }
     
     function createCategoryTermCard(term) {
-        const termUrl = '<?php echo home_url('/mardi-gras-glossary/'); ?>' + term.slug + '/';
+        const termUrl = '<?php echo home_url('/mardi-gras/glossary/'); ?>' + term.slug + '/';
         const difficultyClass = 'mgg-difficulty-' + term.difficulty.toLowerCase();
         
         let definition = term.definition;
@@ -316,7 +332,6 @@ jQuery(document).ready(function($) {
                 </div>
                 <footer class="mgg-term-footer">
                     <div class="mgg-term-stats">
-                        ${term.view_count > 0 ? `<span class="mgg-view-count">👁 ${term.view_count.toLocaleString()} views</span>` : ''}
                     </div>
                     <a href="${termUrl}" class="mgg-read-more">Learn More →</a>
                 </footer>

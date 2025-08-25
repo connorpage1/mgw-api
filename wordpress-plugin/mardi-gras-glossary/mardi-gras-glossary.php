@@ -1,12 +1,19 @@
 <?php
 /**
  * Plugin Name: Mardi Gras Glossary
- * Plugin URI: https://your-site.com/mardi-gras-glossary
+ * Plugin URI: https://github.com/your-username/mardi-gras-glossary
  * Description: A comprehensive Mardi Gras terminology glossary with search, filtering, and SEO optimization. Integrates with your Mardi Gras API and Inspiro theme.
- * Version: 1.0.0
- * Author: Your Name
+ * Version: 1.1.7
+ * Author: Connor Page
+ * Author URI: https://connorpage.com
  * License: GPL v2 or later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: mardi-gras-glossary
+ * Domain Path: /languages
+ * Requires at least: 5.0
+ * Tested up to: 6.4
+ * Requires PHP: 7.4
+ * Network: false
  */
 
 // Prevent direct access
@@ -17,7 +24,7 @@ if (!defined('ABSPATH')) {
 // Define plugin constants
 define('MGG_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('MGG_PLUGIN_PATH', plugin_dir_path(__FILE__));
-define('MGG_VERSION', '1.0.0');
+define('MGG_VERSION', '1.1.7');
 
 // Main plugin class
 class MardiGrasGlossary {
@@ -25,7 +32,7 @@ class MardiGrasGlossary {
     private $api_base_url;
     
     public function __construct() {
-        $this->api_base_url = get_option('mgg_api_url', 'https://your-mardi-gras-api.railway.app');
+        $this->api_base_url = get_option('mgg_api_url', 'https://api.mardigrasworld.com');
         
         add_action('init', array($this, 'init'));
         add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'));
@@ -40,6 +47,7 @@ class MardiGrasGlossary {
         add_action('init', array($this, 'add_rewrite_rules'));
         add_filter('query_vars', array($this, 'add_query_vars'));
         add_action('template_redirect', array($this, 'template_redirect'));
+        add_action('admin_notices', array($this, 'admin_notices'));
     }
     
     public function init() {
@@ -48,6 +56,10 @@ class MardiGrasGlossary {
         
         // Add shortcode for main glossary page
         add_shortcode('mardi_gras_glossary', array($this, 'glossary_shortcode'));
+        
+        // Register Elementor widgets if Elementor is active
+        add_action('elementor/widgets/widgets_registered', array($this, 'register_elementor_widgets'));
+        add_action('elementor/elements/categories_registered', array($this, 'register_elementor_category'));
     }
     
     public function register_post_type() {
@@ -68,7 +80,7 @@ class MardiGrasGlossary {
             ),
             'supports' => array('title', 'editor', 'excerpt', 'custom-fields'),
             'has_archive' => false,
-            'rewrite' => array('slug' => 'mardi-gras-glossary', 'with_front' => false),
+            'rewrite' => array('slug' => 'mardi-gras/glossary', 'with_front' => false),
             'show_in_rest' => true,
             'menu_icon' => 'dashicons-book-alt'
         );
@@ -82,7 +94,7 @@ class MardiGrasGlossary {
                 'name' => 'Glossary Categories',
                 'singular_name' => 'Glossary Category'
             ),
-            'rewrite' => array('slug' => 'mardi-gras-glossary/category'),
+            'rewrite' => array('slug' => 'mardi-gras/glossary/category'),
             'show_in_rest' => true
         ));
     }
@@ -90,21 +102,21 @@ class MardiGrasGlossary {
     public function add_rewrite_rules() {
         // Main glossary page
         add_rewrite_rule(
-            '^mardi-gras-glossary/?$',
+            '^mardi-gras/glossary/?$',
             'index.php?mgg_page=main',
             'top'
         );
         
         // Category pages
         add_rewrite_rule(
-            '^mardi-gras-glossary/category/([^/]+)/?$',
+            '^mardi-gras/glossary/category/([^/]+)/?$',
             'index.php?mgg_page=category&mgg_category=$matches[1]',
             'top'
         );
         
         // Individual term pages
         add_rewrite_rule(
-            '^mardi-gras-glossary/([^/]+)/?$',
+            '^mardi-gras/glossary/([^/]+)/?$',
             'index.php?mgg_page=term&mgg_term=$matches[1]',
             'top'
         );
@@ -158,12 +170,32 @@ class MardiGrasGlossary {
         $atts = shortcode_atts(array(
             'view' => 'main',
             'category' => '',
-            'limit' => 50
+            'show_search' => 'yes',
+            'show_filters' => 'yes',
+            'show_stats' => 'yes'
         ), $atts);
         
         ob_start();
         $this->render_main_glossary($atts);
         return ob_get_clean();
+    }
+    
+    // Elementor integration
+    public function register_elementor_category($elements_manager) {
+        $elements_manager->add_category(
+            'mardi-gras',
+            [
+                'title' => __('Mardi Gras', 'mardi-gras-glossary'),
+                'icon' => 'fa fa-plug',
+            ]
+        );
+    }
+    
+    public function register_elementor_widgets() {
+        if (class_exists('\Elementor\Plugin')) {
+            require_once MGG_PLUGIN_PATH . 'elementor/glossary-widget.php';
+            \Elementor\Plugin::instance()->widgets_manager->register_widget_type(new \MGG_Elementor_Glossary_Widget());
+        }
     }
     
     private function load_main_template() {
@@ -214,15 +246,48 @@ class MardiGrasGlossary {
             'Mardi Gras Glossary Settings',
             'Mardi Gras Glossary',
             'manage_options',
-            'mardi-gras-glossary',
+            'mardi-gras-glossary-settings',
             array($this, 'admin_page')
         );
+        
+        // Add plugin action links
+        add_filter('plugin_action_links_' . plugin_basename(__FILE__), array($this, 'plugin_action_links'));
+    }
+    
+    public function plugin_action_links($links) {
+        $settings_link = '<a href="' . admin_url('options-general.php?page=mardi-gras-glossary-settings') . '">Settings</a>';
+        $docs_link = '<a href="https://github.com/your-username/mardi-gras-glossary#readme" target="_blank">Documentation</a>';
+        array_unshift($links, $settings_link, $docs_link);
+        return $links;
     }
     
     public function admin_init() {
         register_setting('mgg_settings', 'mgg_api_url');
         register_setting('mgg_settings', 'mgg_sync_frequency');
         register_setting('mgg_settings', 'mgg_cache_duration');
+        
+        // Add settings sections
+        add_settings_section(
+            'mgg_api_section',
+            'API Configuration',
+            array($this, 'api_section_callback'),
+            'mgg_settings'
+        );
+        
+        add_settings_section(
+            'mgg_cache_section',
+            'Cache Settings',
+            array($this, 'cache_section_callback'),
+            'mgg_settings'
+        );
+    }
+    
+    public function api_section_callback() {
+        echo '<p>Configure your Mardi Gras API connection settings.</p>';
+    }
+    
+    public function cache_section_callback() {
+        echo '<p>Manage caching and performance settings.</p>';
     }
     
     public function admin_page() {
@@ -303,18 +368,50 @@ class MardiGrasGlossary {
         return $data;
     }
     
+    // Admin notices
+    public function admin_notices() {
+        // Show setup notice if API URL not configured
+        $api_url = get_option('mgg_api_url', 'https://api.mardigrasworld.com');
+        if ($api_url === 'https://your-mardi-gras-api.railway.app' && current_user_can('manage_options')) {
+            $settings_url = admin_url('options-general.php?page=mardi-gras-glossary-settings');
+            echo '<div class="notice notice-warning is-dismissible">';
+            echo '<p><strong>Mardi Gras Glossary:</strong> Please <a href="' . esc_url($settings_url) . '">configure your API settings</a> to get started.</p>';
+            echo '</div>';
+        }
+        
+        // Show activation success message
+        if (get_transient('mgg_activation_notice')) {
+            delete_transient('mgg_activation_notice');
+            echo '<div class="notice notice-success is-dismissible">';
+            echo '<p><strong>Mardi Gras Glossary activated!</strong> Visit <a href="' . admin_url('options-general.php?page=mardi-gras-glossary-settings') . '">Settings</a> to configure your API.</p>';
+            echo '</div>';
+        }
+    }
+    
     // Activation/Deactivation
     public function activate() {
         $this->add_rewrite_rules();
         flush_rewrite_rules();
         
+        // Clear any existing cache
+        $this->clear_all_cache();
+        
         // Set default options
-        add_option('mgg_api_url', 'https://your-mardi-gras-api.railway.app');
+        add_option('mgg_api_url', 'https://api.mardigrasworld.com');
         add_option('mgg_cache_duration', 3600);
+        
+        // Set activation notice
+        set_transient('mgg_activation_notice', true, 30);
     }
     
     public function deactivate() {
         flush_rewrite_rules();
+    }
+    
+    // Clear all cache helper function
+    public function clear_all_cache() {
+        global $wpdb;
+        $wpdb->query("DELETE FROM {$wpdb->options} WHERE option_name LIKE '_transient_mgg_%' OR option_name LIKE '_transient_timeout_mgg_%'");
     }
 }
 
@@ -332,7 +429,7 @@ function mgg_ajax_search_terms() {
     $category = sanitize_text_field($_POST['category'] ?? '');
     $difficulty = sanitize_text_field($_POST['difficulty'] ?? '');
     $sort = sanitize_text_field($_POST['sort'] ?? 'term');
-    $limit = intval($_POST['limit'] ?? 50);
+    $limit = intval($_POST['limit'] ?? 0); // 0 means no limit
     
     $glossary = new MardiGrasGlossary();
     $params = array();
@@ -340,6 +437,7 @@ function mgg_ajax_search_terms() {
     if ($search) $params['search'] = $search;
     if ($category) $params['category'] = $category;
     if ($difficulty) $params['difficulty'] = $difficulty;
+    if ($sort) $params['sort'] = $sort;
     if ($limit) $params['limit'] = $limit;
     
     $data = $glossary->fetch_terms($params);

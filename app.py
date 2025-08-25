@@ -1505,6 +1505,13 @@ def invalid_token_callback(error):
 def missing_token_callback(error):
     return jsonify({'error': 'Authentication required'}), 401
 
+# ==================== ROOT ROUTE ====================
+
+@app.route('/')
+def root():
+    """Root route - redirect to admin interface"""
+    return redirect(url_for('login'))
+
 # ==================== HEALTH CHECK ====================
 
 @app.route('/health')

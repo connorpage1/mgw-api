@@ -156,7 +156,6 @@
             category: currentFilters.category,
             difficulty: currentFilters.difficulty,
             sort: currentFilters.sort,
-            limit: 50,
             page: currentPage
         };
         
@@ -222,8 +221,8 @@
     }
     
     function createTermCard(term) {
-        const termUrl = mgg_ajax.home_url + '/mardi-gras-glossary/' + term.slug + '/';
-        const categoryUrl = mgg_ajax.home_url + '/mardi-gras-glossary/category/' + term.category_slug + '/';
+        const termUrl = mgg_ajax.home_url + '/mardi-gras/glossary/' + term.slug + '/';
+        const categoryUrl = mgg_ajax.home_url + '/mardi-gras/glossary/category/' + term.category_slug + '/';
         const difficultyClass = 'mgg-difficulty-' + term.difficulty.toLowerCase();
         
         let definition = term.definition;
@@ -240,11 +239,10 @@
             example = `<div class="mgg-term-example"><strong>Example:</strong> ${escapeHtml(exampleText)}</div>`;
         }
         
-        const viewCount = term.view_count > 0 ? 
-            `<span class="mgg-view-count"><span class="mgg-views-icon">👁</span> ${formatNumber(term.view_count)} views</span>` : '';
+        const viewCount = '';
         
         const featuredBadge = term.is_featured ? 
-            `<span class="mgg-featured-badge"><span class="mgg-star-icon">⭐</span> Featured</span>` : '';
+            `<span class="mgg-featured-badge">⭐ Featured</span>` : '';
         
         return `
             <article class="mgg-term-card ${difficultyClass}" data-term-id="${term.id}">
@@ -310,6 +308,10 @@
     function updateResultsCount(current, total) {
         $('#mgg-count-current').text(formatNumber(current));
         $('#mgg-count-total').text(formatNumber(total));
+        
+        // Update remaining count for load more button
+        const remaining = Math.max(0, total - current);
+        $('#mgg-remaining-count').text(formatNumber(remaining));
     }
     
     function showLoading() {
@@ -343,6 +345,11 @@
     function formatNumber(num) {
         return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
     }
+    
+    // Clear filters functionality
+    $('#mgg-clear-filters').on('click', function() {
+        clearAllFilters();
+    });
     
     // Global functions
     window.clearAllFilters = function() {

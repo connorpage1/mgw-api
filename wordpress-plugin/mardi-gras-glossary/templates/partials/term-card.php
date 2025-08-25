@@ -9,9 +9,12 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-$term_url = home_url('/mardi-gras-glossary/' . $term['slug'] . '/');
+$term_url = home_url('/mardi-gras/glossary/' . $term['slug'] . '/');
 $difficulty_class = 'mgg-difficulty-' . strtolower($term['difficulty']);
-$category_url = home_url('/mardi-gras-glossary/category/' . $term['category_slug'] . '/');
+
+// Handle category URL - make sure category_slug exists
+$category_slug = !empty($term['category_slug']) ? $term['category_slug'] : sanitize_title($term['category']);
+$category_url = home_url('/mardi-gras/glossary/category/' . $category_slug . '/');
 ?>
 
 <article class="mgg-term-card <?php echo esc_attr($difficulty_class); ?>" data-term-id="<?php echo esc_attr($term['id']); ?>">
@@ -68,11 +71,6 @@ $category_url = home_url('/mardi-gras-glossary/category/' . $term['category_slug
     <!-- Term Footer -->
     <footer class="mgg-term-footer">
         <div class="mgg-term-stats">
-            <?php if ($term['view_count'] > 0): ?>
-                <span class="mgg-view-count">
-                    <span class="mgg-views-icon">👁</span> <?php echo number_format($term['view_count']); ?> views
-                </span>
-            <?php endif; ?>
             
             <?php if ($term['is_featured']): ?>
                 <span class="mgg-featured-badge">
