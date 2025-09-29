@@ -1,5 +1,5 @@
 # app.py - Complete Mardi Gras API with Full CRUD and Admin GUI
-from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, session, abort, current_app
+from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, session, abort, current_app, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity, create_refresh_token
 from flask_cors import CORS
@@ -18,6 +18,12 @@ from flask_login import LoginManager, UserMixin, current_user, login_user, logou
 from collections import defaultdict
 from time import time
 from flask_wtf.csrf import CSRFProtect
+import uuid
+import mimetypes
+from werkzeug.utils import secure_filename
+import boto3
+from botocore.exceptions import ClientError
+import logging
 
 # Load environment variables
 from dotenv import load_dotenv
@@ -60,12 +66,43 @@ app.config['MAIL_USERNAME'] = os.environ.get('MAIL_USERNAME')
 app.config['MAIL_PASSWORD'] = os.environ.get('MAIL_PASSWORD')
 app.config['MAIL_DEFAULT_SENDER'] = os.environ.get('MAIL_DEFAULT_SENDER')
 
+# File Upload Configuration
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max file size
+app.config['UPLOAD_FOLDER'] = os.environ.get('UPLOAD_FOLDER', 'uploads')
+
+# AWS S3 Configuration
+app.config['S3_BUCKET'] = os.environ.get('S3_BUCKET_NAME', '')
+app.config['AWS_ACCESS_KEY_ID'] = os.environ.get('AWS_ACCESS_KEY_ID')
+app.config['AWS_SECRET_ACCESS_KEY'] = os.environ.get('AWS_SECRET_ACCESS_KEY')
+app.config['AWS_REGION'] = os.environ.get('AWS_REGION', 'us-east-1')
+
 # Initialize Extensions
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
 cors = CORS(app, origins=ALLOWED_ORIGINS)
 mail = Mail(app)
 csrf = CSRFProtect(app)
+
+# Setup logging for file uploads
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Initialize S3 client
+try:
+    if app.config['AWS_ACCESS_KEY_ID'] and app.config['AWS_SECRET_ACCESS_KEY']:
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=app.config['AWS_ACCESS_KEY_ID'],
+            aws_secret_access_key=app.config['AWS_SECRET_ACCESS_KEY'],
+            region_name=app.config['AWS_REGION']
+        )
+        logger.info("S3 client initialized successfully")
+    else:
+        s3_client = None
+        logger.info("S3 credentials not provided, using local storage only")
+except Exception as e:
+    logger.warning(f"S3 client initialization failed: {e}")
+    s3_client = None
 
 # CSRF Configuration - Enable for web forms, but disable for API endpoints if they exist
 @app.context_processor
@@ -314,6 +351,95 @@ class Term(db.Model):
             Term.is_active == True
         ).order_by(func.random()).limit(limit).all()
 
+class STLFile(db.Model):
+    __tablename__ = 'stl_files'
+    
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    original_filename = db.Column(db.String(255), nullable=False)
+    s3_key = db.Column(db.String(255), nullable=True)  # For S3 storage
+    local_path = db.Column(db.String(255), nullable=True)  # For local storage
+    file_size = db.Column(db.Integer, nullable=False)
+    upload_timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    last_viewed = db.Column(db.DateTime)
+    view_count = db.Column(db.Integer, default=0)
+    description = db.Column(db.Text)
+    tags = db.Column(db.String(500))
+    
+    # User who uploaded the file
+    uploaded_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
+    # Relationships
+    videos = db.relationship('VideoFile', backref='stl_file', lazy=True, cascade='all, delete-orphan')
+    uploader = db.relationship('User', backref='uploaded_stl_files')
+    
+    # Display flags
+    is_featured = db.Column(db.Boolean, default=False)  # For tourist display
+    
+    def __repr__(self):
+        return f'<STLFile {self.original_filename}>'
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'filename': self.original_filename,
+            'size': self.file_size,
+            'upload_date': self.upload_timestamp.isoformat() if self.upload_timestamp else None,
+            'last_viewed': self.last_viewed.isoformat() if self.last_viewed else None,
+            'view_count': self.view_count,
+            'description': self.description,
+            'tags': self.tags.split(',') if self.tags else [],
+            'is_featured': self.is_featured,
+            'uploaded_by': self.uploader.email if self.uploader else None
+        }
+
+class VideoFile(db.Model):
+    __tablename__ = 'video_files'
+    
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    original_filename = db.Column(db.String(255), nullable=False)
+    s3_key = db.Column(db.String(255), nullable=True)
+    local_path = db.Column(db.String(255), nullable=True)
+    file_size = db.Column(db.Integer, nullable=False)
+    upload_timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    description = db.Column(db.Text)
+    associated_stl_id = db.Column(db.String(36), db.ForeignKey('stl_files.id'), nullable=True)
+    
+    # User who uploaded the file
+    uploaded_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    uploader = db.relationship('User', backref='uploaded_video_files')
+    
+    def __repr__(self):
+        return f'<VideoFile {self.original_filename}>'
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'filename': self.original_filename,
+            'size': self.file_size,
+            'upload_date': self.upload_timestamp.isoformat() if self.upload_timestamp else None,
+            'description': self.description,
+            'associated_stl_id': self.associated_stl_id,
+            'uploaded_by': self.uploader.email if self.uploader else None
+        }
+
+class FileUploadLog(db.Model):
+    __tablename__ = 'file_upload_logs'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    filename = db.Column(db.String(255), nullable=False)
+    file_type = db.Column(db.String(10), nullable=False)  # 'stl' or 'video'
+    file_size = db.Column(db.Integer, nullable=False)
+    upload_timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    ip_address = db.Column(db.String(45))
+    user_agent = db.Column(db.String(500))
+    success = db.Column(db.Boolean, default=True)
+    error_message = db.Column(db.Text)
+    uploaded_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    uploader = db.relationship('User', backref='file_upload_logs')
+    
+    def __repr__(self):
+        return f'<FileUploadLog {self.filename}>'
+
 # ==================== PASSWORD HASHER ====================
 
 class SecurePasswordHasher:
@@ -344,6 +470,94 @@ class SecurePasswordHasher:
 
 # Initialize password hasher
 secure_hasher = SecurePasswordHasher()
+
+# ==================== FILE UPLOAD UTILITY FUNCTIONS ====================
+
+def superadmin_required(f):
+    """Decorator for superadmin-only routes"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for('login'))
+        user = current_user
+        if not user.active or not user.has_role('superadmin'):
+            abort(403)
+        return f(*args, **kwargs)
+    return decorated_function
+
+def allowed_file(filename, file_type='stl'):
+    """Check if file extension is allowed"""
+    if file_type == 'stl':
+        return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'stl'
+    elif file_type == 'video':
+        allowed_extensions = {'mp4', 'avi', 'mov', 'wmv', 'flv', 'webm', 'mkv'}
+        return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
+    return False
+
+def upload_to_s3(file_obj, s3_key):
+    """Upload file to S3"""
+    # Skip S3 if bucket name is empty or S3 client is not available
+    if not s3_client or not app.config['S3_BUCKET']:
+        logger.info("S3 not configured, skipping S3 upload")
+        return False
+    
+    try:
+        s3_client.upload_fileobj(
+            file_obj, 
+            app.config['S3_BUCKET'], 
+            s3_key,
+            ExtraArgs={'ServerSideEncryption': 'AES256'}
+        )
+        logger.info(f"Successfully uploaded {s3_key} to S3")
+        return True
+    except ClientError as e:
+        logger.error(f"Error uploading to S3: {e}")
+        return False
+
+def save_local_file(file_obj, local_path):
+    """Save file locally as fallback"""
+    try:
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        file_obj.save(local_path)
+        logger.info(f"Successfully saved file locally: {local_path}")
+        return True
+    except Exception as e:
+        logger.error(f"Error saving file locally: {e}")
+        return False
+
+def generate_presigned_url(s3_key, expiration=3600):
+    """Generate presigned URL for S3 object"""
+    if not s3_client:
+        return None
+    
+    try:
+        response = s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': app.config['S3_BUCKET'], 'Key': s3_key},
+            ExpiresIn=expiration
+        )
+        return response
+    except ClientError as e:
+        logger.error(f"Error generating presigned URL: {e}")
+        return None
+
+def log_file_upload(filename, file_type, file_size, user_id, success=True, error_message=None):
+    """Log file upload attempt"""
+    try:
+        upload_log = FileUploadLog(
+            filename=filename,
+            file_type=file_type,
+            file_size=file_size,
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get('User-Agent', ''),
+            success=success,
+            error_message=error_message,
+            uploaded_by=user_id
+        )
+        db.session.add(upload_log)
+        db.session.commit()
+    except Exception as e:
+        logger.error(f"Error logging upload: {e}")
 
 # ==================== ADMIN GUI AUTHENTICATION ====================
 
@@ -379,7 +593,10 @@ def admin_main_dashboard():
         'glossary_terms': Term.query.count(),
         'glossary_categories': Category.query.count(),
         'users': User.query.count(),
-        'active_users': User.query.filter_by(is_active=True).count(),
+        'active_users': User.query.filter_by(active=True).count(),
+        'stl_files': STLFile.query.count(),
+        'video_files': VideoFile.query.count(),
+        'total_file_uploads': FileUploadLog.query.count(),
         # Add more as needed
     }
     return render_template('admin/main_dashboard.html', stats=stats)
@@ -1520,6 +1737,330 @@ def root():
     """Root route - redirect to admin interface"""
     return redirect(url_for('login'))
 
+# ==================== SUPERADMIN FILE UPLOAD ROUTES ====================
+
+@app.route('/admin/files/upload/stl', methods=['POST'])
+@superadmin_required
+def upload_stl():
+    """Superadmin: Upload STL file"""
+    if 'file' not in request.files:
+        flash('No file provided', 'error')
+        return redirect(url_for('admin_files_list'))
+    
+    file = request.files['file']
+    if file.filename == '':
+        flash('No file selected', 'error')
+        return redirect(url_for('admin_files_list'))
+    
+    if not allowed_file(file.filename, 'stl'):
+        flash('Invalid file type. Only STL files allowed', 'error')
+        return redirect(url_for('admin_files_list'))
+    
+    # Generate unique identifiers
+    file_id = str(uuid.uuid4())
+    original_filename = secure_filename(file.filename)
+    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+    
+    # Get file size
+    file.seek(0, os.SEEK_END)
+    file_size = file.tell()
+    file.seek(0)
+    
+    # Prepare storage paths
+    s3_key = f"stl/{timestamp}_{file_id}/{original_filename}"
+    local_path = os.path.join(app.config['UPLOAD_FOLDER'], 'stl', f"{timestamp}_{file_id}", original_filename)
+    
+    # Try S3 upload first, fallback to local storage
+    upload_success = False
+    stored_s3_key = None
+    stored_local_path = None
+    
+    if s3_client:
+        if upload_to_s3(file, s3_key):
+            upload_success = True
+            stored_s3_key = s3_key
+            file.seek(0)  # Reset file pointer
+    
+    if not upload_success:
+        # Fallback to local storage
+        if save_local_file(file, local_path):
+            upload_success = True
+            stored_local_path = local_path
+    
+    if not upload_success:
+        log_file_upload(original_filename, 'stl', file_size, current_user.id, False, 'Failed to upload to both S3 and local storage')
+        flash('Failed to upload file', 'error')
+        return redirect(url_for('admin_files_list'))
+    
+    # Save to database
+    try:
+        stl_file = STLFile(
+            id=file_id,
+            original_filename=original_filename,
+            s3_key=stored_s3_key,
+            local_path=stored_local_path,
+            file_size=file_size,
+            description=request.form.get('description', ''),
+            tags=request.form.get('tags', ''),
+            uploaded_by=current_user.id
+        )
+        db.session.add(stl_file)
+        db.session.commit()
+        
+        log_file_upload(original_filename, 'stl', file_size, current_user.id, True)
+        flash(f'STL file "{original_filename}" uploaded successfully', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Database error: {e}")
+        log_file_upload(original_filename, 'stl', file_size, current_user.id, False, str(e))
+        flash('Failed to save file metadata', 'error')
+    
+    return redirect(url_for('admin_files_list'))
+
+@app.route('/admin/files/upload/video', methods=['POST'])
+@superadmin_required
+def upload_video():
+    """Superadmin: Upload video file"""
+    if 'file' not in request.files:
+        flash('No file provided', 'error')
+        return redirect(url_for('admin_files_list'))
+    
+    file = request.files['file']
+    if file.filename == '':
+        flash('No file selected', 'error')
+        return redirect(url_for('admin_files_list'))
+    
+    if not allowed_file(file.filename, 'video'):
+        flash('Invalid file type. Only video files allowed', 'error')
+        return redirect(url_for('admin_files_list'))
+    
+    # Generate unique identifiers
+    file_id = str(uuid.uuid4())
+    original_filename = secure_filename(file.filename)
+    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+    
+    # Get file size
+    file.seek(0, os.SEEK_END)
+    file_size = file.tell()
+    file.seek(0)
+    
+    # Prepare storage paths
+    s3_key = f"video/{timestamp}_{file_id}/{original_filename}"
+    local_path = os.path.join(app.config['UPLOAD_FOLDER'], 'video', f"{timestamp}_{file_id}", original_filename)
+    
+    # Try S3 upload first, fallback to local storage
+    upload_success = False
+    stored_s3_key = None
+    stored_local_path = None
+    
+    if s3_client:
+        if upload_to_s3(file, s3_key):
+            upload_success = True
+            stored_s3_key = s3_key
+            file.seek(0)
+    
+    if not upload_success:
+        if save_local_file(file, local_path):
+            upload_success = True
+            stored_local_path = local_path
+    
+    if not upload_success:
+        log_file_upload(original_filename, 'video', file_size, current_user.id, False, 'Failed to upload to both S3 and local storage')
+        flash('Failed to upload file', 'error')
+        return redirect(url_for('admin_files_list'))
+    
+    # Validate STL association if provided
+    stl_id = request.form.get('stl_id')
+    if stl_id:
+        stl_file = STLFile.query.get(stl_id)
+        if not stl_file:
+            flash('Associated STL file not found', 'error')
+            return redirect(url_for('admin_files_list'))
+    
+    # Save to database
+    try:
+        video_file = VideoFile(
+            id=file_id,
+            original_filename=original_filename,
+            s3_key=stored_s3_key,
+            local_path=stored_local_path,
+            file_size=file_size,
+            description=request.form.get('description', ''),
+            associated_stl_id=stl_id,
+            uploaded_by=current_user.id
+        )
+        db.session.add(video_file)
+        db.session.commit()
+        
+        log_file_upload(original_filename, 'video', file_size, current_user.id, True)
+        flash(f'Video file "{original_filename}" uploaded successfully', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Database error: {e}")
+        log_file_upload(original_filename, 'video', file_size, current_user.id, False, str(e))
+        flash('Failed to save file metadata', 'error')
+    
+    return redirect(url_for('admin_files_list'))
+
+@app.route('/admin/files')
+@superadmin_required
+def admin_files_list():
+    """Superadmin: List all uploaded files"""
+    stl_files = STLFile.query.order_by(STLFile.upload_timestamp.desc()).all()
+    video_files = VideoFile.query.order_by(VideoFile.upload_timestamp.desc()).all()
+    
+    return render_template('admin/files_list.html', 
+                         stl_files=stl_files, 
+                         video_files=video_files)
+
+@app.route('/admin/files/stl/<file_id>')
+@superadmin_required
+def admin_view_stl_file(file_id):
+    """Superadmin: View STL file details"""
+    stl_file = STLFile.query.get_or_404(file_id)
+    
+    # Update view statistics
+    stl_file.last_viewed = datetime.utcnow()
+    stl_file.view_count = (stl_file.view_count or 0) + 1
+    db.session.commit()
+    
+    # Generate download URL
+    download_url = None
+    if stl_file.s3_key:
+        download_url = generate_presigned_url(stl_file.s3_key)
+    elif stl_file.local_path and os.path.exists(stl_file.local_path):
+        download_url = url_for('admin_download_stl_file', file_id=file_id)
+    
+    return render_template('admin/stl_file_detail.html', 
+                         stl_file=stl_file, 
+                         download_url=download_url)
+
+@app.route('/admin/files/video/<file_id>')
+@superadmin_required
+def admin_view_video_file(file_id):
+    """Superadmin: View video file details"""
+    video_file = VideoFile.query.get_or_404(file_id)
+    
+    # Generate download URL
+    download_url = None
+    if video_file.s3_key:
+        download_url = generate_presigned_url(video_file.s3_key)
+    elif video_file.local_path and os.path.exists(video_file.local_path):
+        download_url = url_for('admin_download_video_file', file_id=file_id)
+    
+    return render_template('admin/video_file_detail.html', 
+                         video_file=video_file, 
+                         download_url=download_url)
+
+@app.route('/admin/files/stl/<file_id>/download')
+@superadmin_required
+def admin_download_stl_file(file_id):
+    """Superadmin: Download STL file from local storage"""
+    stl_file = STLFile.query.get_or_404(file_id)
+    
+    if not stl_file.local_path or not os.path.exists(stl_file.local_path):
+        flash('File not found on local storage', 'error')
+        return redirect(url_for('admin_view_stl_file', file_id=file_id))
+    
+    return send_file(
+        stl_file.local_path,
+        as_attachment=True,
+        download_name=stl_file.original_filename,
+        mimetype='application/octet-stream'
+    )
+
+@app.route('/admin/files/video/<file_id>/download')
+@superadmin_required
+def admin_download_video_file(file_id):
+    """Superadmin: Download video file from local storage"""
+    video_file = VideoFile.query.get_or_404(file_id)
+    
+    if not video_file.local_path or not os.path.exists(video_file.local_path):
+        flash('File not found on local storage', 'error')
+        return redirect(url_for('admin_view_video_file', file_id=file_id))
+    
+    return send_file(
+        video_file.local_path,
+        as_attachment=True,
+        download_name=video_file.original_filename
+    )
+
+@app.route('/admin/files/stl/<file_id>/delete', methods=['POST'])
+@superadmin_required
+def admin_delete_stl_file(file_id):
+    """Superadmin: Delete STL file"""
+    stl_file = STLFile.query.get_or_404(file_id)
+    
+    # Delete from S3 if stored there
+    if stl_file.s3_key and s3_client:
+        try:
+            s3_client.delete_object(Bucket=app.config['S3_BUCKET'], Key=stl_file.s3_key)
+            logger.info(f"Deleted {stl_file.s3_key} from S3")
+        except ClientError as e:
+            logger.error(f"Error deleting from S3: {e}")
+    
+    # Delete local file if exists
+    if stl_file.local_path and os.path.exists(stl_file.local_path):
+        try:
+            os.remove(stl_file.local_path)
+            logger.info(f"Deleted local file: {stl_file.local_path}")
+        except Exception as e:
+            logger.error(f"Error deleting local file: {e}")
+    
+    # Delete from database
+    db.session.delete(stl_file)
+    db.session.commit()
+    
+    flash(f'STL file "{stl_file.original_filename}" deleted successfully', 'success')
+    return redirect(url_for('admin_files_list'))
+
+@app.route('/admin/files/video/<file_id>/delete', methods=['POST'])
+@superadmin_required
+def admin_delete_video_file(file_id):
+    """Superadmin: Delete video file"""
+    video_file = VideoFile.query.get_or_404(file_id)
+    
+    # Delete from S3 if stored there
+    if video_file.s3_key and s3_client:
+        try:
+            s3_client.delete_object(Bucket=app.config['S3_BUCKET'], Key=video_file.s3_key)
+            logger.info(f"Deleted {video_file.s3_key} from S3")
+        except ClientError as e:
+            logger.error(f"Error deleting from S3: {e}")
+    
+    # Delete local file if exists
+    if video_file.local_path and os.path.exists(video_file.local_path):
+        try:
+            os.remove(video_file.local_path)
+            logger.info(f"Deleted local file: {video_file.local_path}")
+        except Exception as e:
+            logger.error(f"Error deleting local file: {e}")
+    
+    # Delete from database
+    db.session.delete(video_file)
+    db.session.commit()
+    
+    flash(f'Video file "{video_file.original_filename}" deleted successfully', 'success')
+    return redirect(url_for('admin_files_list'))
+
+@app.route('/admin/files/stl/<file_id>/feature', methods=['POST'])
+@superadmin_required
+def admin_set_featured_file(file_id):
+    """Superadmin: Set which STL file is featured for tourists"""
+    # Unfeature all files
+    STLFile.query.update({STLFile.is_featured: False})
+    
+    # Feature the selected file
+    new_featured = STLFile.query.get_or_404(file_id)
+    new_featured.is_featured = True
+    
+    db.session.commit()
+    
+    flash(f'STL file "{new_featured.original_filename}" is now featured for tourists', 'success')
+    return redirect(url_for('admin_files_list'))
+
 # ==================== HEALTH CHECK ====================
 
 @app.route('/health')
@@ -1566,7 +2107,7 @@ def init_db():
             print(f"✅ Created {len(default_categories)} default categories")
         
         # Create default roles if they don't exist
-        default_roles = ['superadmin', 'admin', 'editor', 'user']
+        default_roles = ['superadmin', 'admin', 'user']
         for role_name in default_roles:
             if not Role.query.filter_by(name=role_name).first():
                 role = Role(name=role_name)
@@ -1597,7 +2138,14 @@ def init_db():
             print(f"🔑 Admin API Key: {admin_user.api_key}")
             print(f"🌐 Admin GUI: http://localhost:5555/admin")
         
-        print("✅ Full CRUD database initialization completed!")
+        # Create upload directory
+        upload_dir = app.config['UPLOAD_FOLDER']
+        os.makedirs(upload_dir, exist_ok=True)
+        os.makedirs(os.path.join(upload_dir, 'stl'), exist_ok=True)
+        os.makedirs(os.path.join(upload_dir, 'video'), exist_ok=True)
+        print(f"✅ Upload directories created: {upload_dir}")
+        
+        print("✅ Full CRUD database initialization completed with file upload support!")
         
     except Exception as e:
         db.session.rollback()
