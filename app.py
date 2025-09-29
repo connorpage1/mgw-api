@@ -56,7 +56,7 @@ app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
 app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
 
 # CORS Configuration
-ALLOWED_ORIGINS = os.environ.get('CORS_ORIGINS', 'http://localhost:3000,http://localhost:8000').split(',')
+ALLOWED_ORIGINS = os.environ.get('CORS_ORIGINS', 'http://localhost:3000,http://localhost:8000,http://localhost:5555,http://localhost:5556,file://').split(',')
 
 # Mail Configuration
 app.config['MAIL_SERVER'] = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
@@ -79,7 +79,11 @@ app.config['AWS_REGION'] = os.environ.get('AWS_REGION', 'us-east-1')
 # Initialize Extensions
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
-cors = CORS(app, origins=ALLOWED_ORIGINS)
+cors = CORS(app, origins=ALLOWED_ORIGINS, resources={
+    r"/pixie/api/*": {"origins": "*"},  # Allow all origins for Pixie API endpoints
+    r"/api/*": {"origins": ALLOWED_ORIGINS},  # Restrict other API endpoints
+    r"/*": {"origins": ALLOWED_ORIGINS}  # Default restriction for all other routes
+})
 mail = Mail(app)
 csrf = CSRFProtect(app)
 
@@ -1904,6 +1908,50 @@ def upload_video():
     
     return redirect(url_for('admin_files_list'))
 
+@app.route('/admin/files/dashboard')
+@superadmin_required
+def admin_files_dashboard():
+    """Superadmin: Files dashboard landing page"""
+    stats = {
+        'stl_files': STLFile.query.count(),
+        'video_files': VideoFile.query.count(),
+        'total_file_uploads': FileUploadLog.query.count(),
+    }
+    
+    # Get recent files for dashboard display
+    recent_stl_files = STLFile.query.order_by(STLFile.upload_timestamp.desc()).limit(5).all()
+    recent_video_files = VideoFile.query.order_by(VideoFile.upload_timestamp.desc()).limit(5).all()
+    
+    # Combine and sort recent files
+    recent_files = []
+    for stl in recent_stl_files:
+        recent_files.append({
+            'id': stl.id,
+            'filename': stl.original_filename,
+            'type': 'stl',
+            'size': stl.file_size,
+            'upload_date': stl.upload_timestamp
+        })
+    for video in recent_video_files:
+        recent_files.append({
+            'id': video.id,
+            'filename': video.original_filename,
+            'type': 'video',
+            'size': video.file_size,
+            'upload_date': video.upload_timestamp
+        })
+    
+    # Sort by upload date and limit to 10
+    recent_files = sorted(recent_files, key=lambda x: x['upload_date'], reverse=True)[:10]
+    
+    # Get all STL files for video upload modal
+    stl_files = STLFile.query.order_by(STLFile.original_filename).all()
+    
+    return render_template('admin/files_dashboard.html', 
+                         stats=stats, 
+                         recent_files=recent_files,
+                         stl_files=stl_files)
+
 @app.route('/admin/files')
 @superadmin_required
 def admin_files_list():
@@ -2060,6 +2108,72 @@ def admin_set_featured_file(file_id):
     
     flash(f'STL file "{new_featured.original_filename}" is now featured for tourists', 'success')
     return redirect(url_for('admin_files_list'))
+
+# ==================== PUBLIC PIXIE API ENDPOINTS ====================
+
+@app.route('/pixie/api/featured', methods=['GET'])
+def pixie_api_featured():
+    """Public API: Get featured STL file for Pixie tourist viewer"""
+    try:
+        # Get the featured STL file
+        featured_file = STLFile.query.filter_by(is_featured=True).first()
+        
+        if not featured_file:
+            return jsonify({'error': 'No featured file set'}), 404
+        
+        # Generate download URL
+        download_url = None
+        if featured_file.s3_key and s3_client:
+            try:
+                download_url = generate_presigned_url(featured_file.s3_key, expiration=3600)
+            except Exception as e:
+                logger.error(f"Error generating presigned URL: {e}")
+        
+        if not download_url and featured_file.local_path:
+            # For local files, use our download endpoint
+            download_url = f"/pixie/api/download/stl/{featured_file.id}"
+        
+        response_data = {
+            'id': featured_file.id,
+            'filename': featured_file.original_filename,
+            'size': featured_file.file_size,
+            'upload_date': featured_file.upload_timestamp.isoformat(),
+            'view_count': featured_file.view_count or 0,
+            'description': featured_file.description or '',
+            'tags': featured_file.tags.split(',') if featured_file.tags else [],
+            'download_url': download_url
+        }
+        
+        # Update view count
+        featured_file.last_viewed = datetime.utcnow()
+        featured_file.view_count = (featured_file.view_count or 0) + 1
+        db.session.commit()
+        
+        return jsonify(response_data)
+        
+    except Exception as e:
+        logger.error(f"Error getting featured file: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
+@app.route('/pixie/api/download/stl/<file_id>', methods=['GET'])
+def pixie_api_download_stl(file_id):
+    """Public API: Download STL file for Pixie viewer"""
+    try:
+        stl_file = STLFile.query.get_or_404(file_id)
+        
+        if not stl_file.local_path or not os.path.exists(stl_file.local_path):
+            return jsonify({'error': 'File not found'}), 404
+        
+        return send_file(
+            stl_file.local_path,
+            as_attachment=False,  # Allow inline viewing for STL viewer
+            download_name=stl_file.original_filename,
+            mimetype='application/octet-stream'
+        )
+        
+    except Exception as e:
+        logger.error(f"Error downloading STL file: {e}")
+        return jsonify({'error': 'File not found'}), 404
 
 # ==================== HEALTH CHECK ====================
 

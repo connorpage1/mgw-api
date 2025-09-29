@@ -47,6 +47,52 @@
         50% { background-position: 100% 50%; }
         100% { background-position: 0% 50%; }
     }
+    
+    /* Password toggle styles */
+    .password-field {
+        position: relative;
+    }
+    .password-toggle {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        cursor: pointer;
+        color: #6b7280;
+        transition: color 0.3s ease;
+    }
+    .password-toggle:hover {
+        color: #10b981;
+    }
+    
+    /* Mobile responsiveness */
+    @media (max-width: 640px) {
+        .min-h-screen {
+            padding: 1rem;
+        }
+        .login-card {
+            padding: 1.5rem !important;
+            margin: 1rem 0;
+        }
+        h2 {
+            font-size: 2rem !important;
+        }
+        .logo-glow {
+            height: 4rem !important;
+        }
+        .form-input {
+            font-size: 16px; /* Prevents zoom on iOS */
+        }
+    }
+    
+    @media (max-width: 480px) {
+        h2 {
+            font-size: 1.75rem !important;
+        }
+        .login-card {
+            padding: 1rem !important;
+        }
+    }
 </style>
 {% endblock %}
 
@@ -101,12 +147,17 @@
                     <label for="password" class="block text-sm font-medium text-gray-700 mb-2">
                         <i class="fas fa-lock mr-2 text-emerald-600"></i>Password
                     </label>
-                    <input id="password" 
-                           type="password" 
-                           name="password" 
-                           class="form-input w-full px-4 py-3 rounded-lg border-2 border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-300" 
-                           placeholder="Enter your password"
-                           required>
+                    <div class="password-field">
+                        <input id="password" 
+                               type="password" 
+                               name="password" 
+                               class="form-input w-full px-4 py-3 pr-12 rounded-lg border-2 border-gray-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 transition-all duration-300" 
+                               placeholder="Enter your password"
+                               required>
+                        <span class="password-toggle" onclick="togglePassword()" id="toggleIcon">
+                            <i class="fas fa-eye"></i>
+                        </span>
+                    </div>
                 </div>
 
                 <div>
@@ -125,4 +176,19 @@
         </div>
     </div>
 </div>
+
+<script>
+function togglePassword() {
+    const passwordField = document.getElementById('password');
+    const toggleIcon = document.getElementById('toggleIcon');
+    
+    if (passwordField.type === 'password') {
+        passwordField.type = 'text';
+        toggleIcon.innerHTML = '<i class="fas fa-eye-slash"></i>';
+    } else {
+        passwordField.type = 'password';
+        toggleIcon.innerHTML = '<i class="fas fa-eye"></i>';
+    }
+}
+</script>
 {% endblock %}

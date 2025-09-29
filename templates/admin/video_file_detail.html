@@ -1,0 +1,180 @@
+{% extends "admin/base.html" %}
+
+{% block page_title %}Video File - {{ video_file.original_filename }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <nav class="text-sm text-gray-500 mb-2">
+                <a href="{{ url_for('admin_files_dashboard') }}" class="hover:text-gray-700">Files</a>
+                <span class="mx-2">/</span>
+                <a href="{{ url_for('admin_files_list') }}" class="hover:text-gray-700">Manage Files</a>
+                <span class="mx-2">/</span>
+                <span class="text-gray-900">{{ video_file.original_filename }}</span>
+            </nav>
+            <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+                <i class="fas fa-video text-blue-600 mr-3"></i>
+                {{ video_file.original_filename }}
+            </h1>
+        </div>
+        <div class="flex space-x-3">
+            <form method="POST" action="{{ url_for('admin_delete_video_file', file_id=video_file.id) }}"
+                  data-confirm='{"title": "Delete Video File", "message": "Are you sure you want to delete {{ video_file.original_filename }}? This action cannot be undone.", "action": "Delete"}'>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <button type="submit" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition-colors">
+                    <i class="fas fa-trash mr-2"></i>Delete
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- File Information -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <!-- Main Info Card -->
+        <div class="lg:col-span-2 bg-white rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">File Information</h2>
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">File Name</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ video_file.original_filename }}</dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">File Size</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ (video_file.file_size / 1024 / 1024) | round(2) }} MB</dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Upload Date</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ video_file.upload_timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Uploaded By</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ video_file.uploader.email }}</dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">File Type</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ video_file.original_filename.split('.')[-1].upper() }}</dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Storage</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ 'S3' if video_file.s3_key else 'Local' }}</dd>
+                </div>
+            </dl>
+            
+            {% if video_file.description %}
+            <div class="mt-6">
+                <dt class="text-sm font-medium text-gray-500 mb-2">Description</dt>
+                <dd class="text-sm text-gray-900 bg-gray-50 p-3 rounded">{{ video_file.description }}</dd>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Actions Card -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">Actions</h2>
+            <div class="space-y-3">
+                {% if download_url %}
+                <a href="{{ download_url }}" 
+                   class="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors text-center block">
+                    <i class="fas fa-download mr-2"></i>Download File
+                </a>
+                {% else %}
+                <div class="w-full bg-gray-300 text-gray-500 px-4 py-2 rounded text-center">
+                    <i class="fas fa-exclamation-triangle mr-2"></i>File Not Available
+                </div>
+                {% endif %}
+                
+                <button onclick="copyToClipboard('{{ video_file.id }}')" 
+                        class="w-full bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700 transition-colors">
+                    <i class="fas fa-copy mr-2"></i>Copy File ID
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Associated STL File -->
+    {% if video_file.stl_file %}
+    <div class="bg-white rounded-lg shadow mb-8">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">Associated STL File</h2>
+        </div>
+        <div class="p-6">
+            <div class="flex items-center justify-between bg-purple-50 rounded-lg p-4">
+                <div class="flex items-center">
+                    <i class="fas fa-cube text-purple-600 text-2xl mr-4"></i>
+                    <div>
+                        <h3 class="font-medium text-gray-900">{{ video_file.stl_file.original_filename }}</h3>
+                        <p class="text-sm text-gray-500">
+                            {{ (video_file.stl_file.file_size / 1024 / 1024) | round(2) }} MB
+                            {% if video_file.stl_file.is_featured %} • Featured{% endif %}
+                        </p>
+                        {% if video_file.stl_file.description %}
+                        <p class="text-sm text-gray-600 mt-1">{{ video_file.stl_file.description[:100] }}{% if video_file.stl_file.description|length > 100 %}...{% endif %}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                <a href="{{ url_for('admin_view_stl_file', file_id=video_file.associated_stl_id) }}" 
+                   class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition-colors">
+                    View STL File
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- File History -->
+    <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">File History</h2>
+        </div>
+        <div class="p-6">
+            <div class="space-y-3">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-upload text-green-500"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-gray-900">
+                            File uploaded by <span class="font-medium">{{ video_file.uploader.email }}</span>
+                        </p>
+                        <p class="text-xs text-gray-500">{{ video_file.upload_timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                    </div>
+                </div>
+                
+                {% if video_file.stl_file %}
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-link text-purple-500"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-gray-900">
+                            Associated with STL file: <span class="font-medium">{{ video_file.stl_file.original_filename }}</span>
+                        </p>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(function() {
+        // Show temporary success message
+        const button = event.target;
+        const originalText = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-check mr-2"></i>Copied!';
+        button.classList.remove('bg-gray-600', 'hover:bg-gray-700');
+        button.classList.add('bg-green-600');
+        
+        setTimeout(function() {
+            button.innerHTML = originalText;
+            button.classList.remove('bg-green-600');
+            button.classList.add('bg-gray-600', 'hover:bg-gray-700');
+        }, 2000);
+    });
+}
+</script>
+{% endblock %}

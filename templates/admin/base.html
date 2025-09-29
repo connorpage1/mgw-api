@@ -23,12 +23,50 @@
         .border-accent {
             border-color: #10b981;
         }
+        
+        /* Mobile overlay - hidden by default */
+        .mobile-overlay {
+            display: none;
+        }
+        .mobile-overlay.active {
+            display: block;
+        }
+        
+        /* Mobile responsive sidebar */
+        @media (max-width: 768px) {
+            .mobile-sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease-in-out;
+            }
+            .mobile-sidebar.open {
+                transform: translateX(0);
+            }
+            .mobile-main-content {
+                margin-left: 0 !important;
+            }
+            .mobile-header {
+                padding-left: 1rem !important;
+                padding-right: 1rem !important;
+            }
+            .mobile-content {
+                padding: 1rem !important;
+            }
+        }
+        
+        @media (max-width: 640px) {
+            .mobile-content {
+                padding: 0.75rem !important;
+            }
+        }
     </style>
 </head>
 <body class="bg-gray-50">
+    <!-- Mobile Overlay -->
+    <div id="mobileOverlay" class="mobile-overlay fixed inset-0 bg-black bg-opacity-50 z-40"></div>
+    
     <div class="flex h-screen">
         <!-- Sidebar -->
-        <div class="admin-sidebar text-white w-64 flex flex-col">
+        <div id="sidebar" class="admin-sidebar text-white w-64 flex flex-col fixed md:relative z-50 h-full mobile-sidebar">
             <!-- Sidebar logo -->
             <div class="flex items-center justify-center px-6 py-4">
                 <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="h-10 w-auto"/>
@@ -62,6 +100,29 @@
                         </a>
                     </li>
                     {% endif %}
+                    {% if current_user.has_role('superadmin') %}
+                    {% if request.endpoint and (request.endpoint.startswith('admin_files_') or request.endpoint == 'admin_files_dashboard') %}
+                    <li>
+                        <a href="{{ url_for('admin_files_dashboard') }}" 
+                           class="flex items-center px-4 py-3 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all {% if request.endpoint == 'admin_files_dashboard' %}bg-white bg-opacity-20{% endif %}">
+                            <i class="fas fa-layer-group mr-3"></i>Files Dashboard
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('admin_files_list') }}" 
+                           class="flex items-center px-4 py-3 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all {% if request.endpoint and 'files' in request.endpoint and 'dashboard' not in request.endpoint %}bg-white bg-opacity-20{% endif %}">
+                            <i class="fas fa-file-upload mr-3"></i>Manage Files
+                        </a>
+                    </li>
+                    {% else %}
+                    <li>
+                        <a href="{{ url_for('admin_files_dashboard') }}" 
+                           class="flex items-center px-4 py-3 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all">
+                            <i class="fas fa-cloud-upload-alt mr-3"></i>Files
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% endif %}
                     <li>
                         <a href="{{ url_for('admin_account') }}" class="flex items-center px-4 py-2 hover:bg-blue-100">
                             <i class="fas fa-user-cog mr-3"></i>My Account
@@ -78,10 +139,15 @@
         </div>
 
         <!-- Main Content -->
-        <div class="flex-1 flex flex-col overflow-hidden">
+        <div class="flex-1 flex flex-col overflow-hidden mobile-main-content md:ml-64">
 
-            <!-- Top bar with profile dropdown (single, correct username/email) -->
-            <div class="flex items-center justify-end px-6 py-4 bg-white border-b">
+            <!-- Top bar with mobile menu button and profile dropdown -->
+            <div class="flex items-center justify-between px-6 py-4 bg-white border-b mobile-header">
+                <!-- Mobile menu button -->
+                <button id="mobileMenuBtn" class="md:hidden text-gray-600 hover:text-gray-900 focus:outline-none">
+                    <i class="fas fa-bars text-xl"></i>
+                </button>
+                <div class="md:hidden"></div> <!-- Spacer for mobile -->
                 <div class="relative group">
                     <button class="flex items-center focus:outline-none" id="profileDropdownBtn">
                         <span class="mr-2 font-semibold">Welcome, {{ current_user.display_name }}</span>
@@ -110,7 +176,7 @@
             {% endwith %}
 
             <!-- Content Area -->
-            <main class="flex-1 overflow-y-auto p-6">
+            <main class="flex-1 overflow-y-auto p-6 mobile-content">
                 {% block content %}{% endblock %}
             </main>
         </div>
@@ -128,6 +194,23 @@
         </div>
     </div>
     <script>
+    // Mobile menu toggle
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    const sidebar = document.getElementById('sidebar');
+    const mobileOverlay = document.getElementById('mobileOverlay');
+    
+    if (mobileMenuBtn && sidebar && mobileOverlay) {
+        mobileMenuBtn.addEventListener('click', function() {
+            sidebar.classList.toggle('open');
+            mobileOverlay.classList.toggle('active');
+        });
+        
+        mobileOverlay.addEventListener('click', function() {
+            sidebar.classList.remove('open');
+            mobileOverlay.classList.remove('active');
+        });
+    }
+    
     // Simple JS to toggle dropdown on click for accessibility
     const btn = document.getElementById('profileDropdownBtn');
     const dropdown = document.getElementById('profileDropdown');

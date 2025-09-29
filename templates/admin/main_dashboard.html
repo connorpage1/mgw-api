@@ -6,42 +6,58 @@
 {% endblock %}
 
 {% block content %}
-<div class="max-w-4xl mx-auto mt-8">
-    <h2 class="text-2xl font-bold mb-6 text-emerald-700">Welcome to the Admin Dashboard</h2>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+<div class="max-w-4xl mx-auto mt-4 md:mt-8">
+    <h2 class="text-xl md:text-2xl font-bold mb-4 md:mb-6 text-emerald-700">Welcome to the Admin Dashboard</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         <!-- Glossary App Card -->
-        <div class="bg-white rounded-lg shadow-md p-6 flex flex-col justify-between hover:shadow-lg transition-shadow">
+        <div class="bg-white rounded-lg shadow-md p-4 md:p-6 flex flex-col justify-between hover:shadow-lg transition-shadow">
             <div>
-                <h3 class="text-lg font-semibold text-emerald-800 mb-2 flex items-center">
+                <h3 class="text-base md:text-lg font-semibold text-emerald-800 mb-2 flex items-center">
                     <span class="mr-2">📚</span> Glossary Management
                 </h3>
-                <p class="text-gray-600 mb-4">Manage Mardi Gras terms, categories, and bulk uploads.</p>
-                <ul class="mb-4 text-sm text-gray-700">
+                <p class="text-gray-600 mb-3 md:mb-4 text-sm md:text-base">Manage Mardi Gras terms, categories, and bulk uploads.</p>
+                <ul class="mb-3 md:mb-4 text-xs md:text-sm text-gray-700 space-y-1">
                     <li>Total Terms: <span class="font-bold text-emerald-600">{{ stats.glossary_terms }}</span></li>
                     <li>Total Categories: <span class="font-bold text-emerald-600">{{ stats.glossary_categories }}</span></li>
                 </ul>
             </div>
-            <a href="{{ url_for('admin_glossary_dashboard') }}" class="mt-4 inline-block px-4 py-2 btn-primary text-white rounded-lg hover:shadow-lg transition-all font-semibold text-center">Go to Glossary Admin</a>
+            <a href="{{ url_for('admin_glossary_dashboard') }}" class="mt-3 md:mt-4 inline-block px-3 md:px-4 py-2 btn-primary text-white rounded-lg hover:shadow-lg transition-all font-semibold text-center text-sm md:text-base">Go to Glossary Admin</a>
+        </div>
+        
+        <!-- Files Management App Card (for superadmins only) -->
+        {% if current_user.has_role('superadmin') %}
+        <div class="bg-white rounded-lg shadow-md p-4 md:p-6 flex flex-col justify-between hover:shadow-lg transition-shadow">
+            <div>
+                <h3 class="text-base md:text-lg font-semibold text-emerald-800 mb-2 flex items-center">
+                    <span class="mr-2">📁</span> File Management
+                </h3>
+                <p class="text-gray-600 mb-3 md:mb-4 text-sm md:text-base">Upload and manage STL files and videos for projects.</p>
+                <ul class="mb-3 md:mb-4 text-xs md:text-sm text-gray-700 space-y-1">
+                    <li>STL Files: <span class="font-bold text-purple-600">{{ stats.stl_files }}</span></li>
+                    <li>Video Files: <span class="font-bold text-blue-600">{{ stats.video_files }}</span></li>
+                    <li>Total Uploads: <span class="font-bold text-emerald-600">{{ stats.total_file_uploads }}</span></li>
+                </ul>
+            </div>
+            <a href="{{ url_for('admin_files_dashboard') }}" class="mt-3 md:mt-4 inline-block px-3 md:px-4 py-2 btn-primary text-white rounded-lg hover:shadow-lg transition-all font-semibold text-center text-sm md:text-base">Go to Files Admin</a>
         </div>
         
         <!-- User Management App Card (for superadmins only) -->
-        {% if current_user.has_role('superadmin') %}
-        <div class="bg-white rounded-lg shadow-md p-6 flex flex-col justify-between hover:shadow-lg transition-shadow">
+        <div class="bg-white rounded-lg shadow-md p-4 md:p-6 flex flex-col justify-between hover:shadow-lg transition-shadow">
             <div>
-                <h3 class="text-lg font-semibold text-emerald-800 mb-2 flex items-center">
+                <h3 class="text-base md:text-lg font-semibold text-emerald-800 mb-2 flex items-center">
                     <span class="mr-2">👥</span> User Management
                 </h3>
-                <p class="text-gray-600 mb-4">Manage admin users, roles, and permissions.</p>
-                <ul class="mb-4 text-sm text-gray-700">
+                <p class="text-gray-600 mb-3 md:mb-4 text-sm md:text-base">Manage admin users, roles, and permissions.</p>
+                <ul class="mb-3 md:mb-4 text-xs md:text-sm text-gray-700 space-y-1">
                     <li>Total Users: <span class="font-bold text-emerald-600">{{ stats.users }}</span></li>
                     <li>Active Users: <span class="font-bold text-emerald-600">{{ stats.active_users }}</span></li>
                 </ul>
             </div>
-            <a href="{{ url_for('admin_users_list') }}" class="mt-4 inline-block px-4 py-2 btn-primary text-white rounded-lg hover:shadow-lg transition-all font-semibold text-center">Go to User Admin</a>
+            <a href="{{ url_for('admin_users_list') }}" class="mt-3 md:mt-4 inline-block px-3 md:px-4 py-2 btn-primary text-white rounded-lg hover:shadow-lg transition-all font-semibold text-center text-sm md:text-base">Go to User Admin</a>
         </div>
         {% endif %}
     </div>
-    <div class="mt-10 text-center text-gray-400 text-xs">
+    <div class="mt-6 md:mt-10 text-center text-gray-400 text-xs">
         &copy; {{ now().year }} Mardi Gras World Admin
     </div>
 </div>

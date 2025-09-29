@@ -1,0 +1,221 @@
+{% extends "admin/base.html" %}
+
+{% block page_title %}STL File - {{ stl_file.original_filename }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <nav class="text-sm text-gray-500 mb-2">
+                <a href="{{ url_for('admin_files_dashboard') }}" class="hover:text-gray-700">Files</a>
+                <span class="mx-2">/</span>
+                <a href="{{ url_for('admin_files_list') }}" class="hover:text-gray-700">Manage Files</a>
+                <span class="mx-2">/</span>
+                <span class="text-gray-900">{{ stl_file.original_filename }}</span>
+            </nav>
+            <h1 class="text-2xl font-bold text-gray-900 flex items-center">
+                <i class="fas fa-cube text-purple-600 mr-3"></i>
+                {{ stl_file.original_filename }}
+                {% if stl_file.is_featured %}
+                <span class="ml-3 px-2 py-1 bg-green-100 text-green-800 text-sm font-medium rounded-full">Featured</span>
+                {% endif %}
+            </h1>
+        </div>
+        <div class="flex space-x-3">
+            {% if not stl_file.is_featured %}
+            <form method="POST" action="{{ url_for('admin_set_featured_file', file_id=stl_file.id) }}" class="inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition-colors">
+                    <i class="fas fa-star mr-2"></i>Feature File
+                </button>
+            </form>
+            {% endif %}
+            <form method="POST" action="{{ url_for('admin_delete_stl_file', file_id=stl_file.id) }}"
+                  data-confirm='{"title": "Delete STL File", "message": "Are you sure you want to delete {{ stl_file.original_filename }}? This action cannot be undone.", "action": "Delete"}'>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <button type="submit" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition-colors">
+                    <i class="fas fa-trash mr-2"></i>Delete
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- File Information -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <!-- Main Info Card -->
+        <div class="lg:col-span-2 bg-white rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">File Information</h2>
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">File Name</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ stl_file.original_filename }}</dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">File Size</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ (stl_file.file_size / 1024 / 1024) | round(2) }} MB</dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Upload Date</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ stl_file.upload_timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Uploaded By</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ stl_file.uploader.email }}</dd>
+                </div>
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">View Count</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ stl_file.view_count or 0 }}</dd>
+                </div>
+                {% if stl_file.last_viewed %}
+                <div>
+                    <dt class="text-sm font-medium text-gray-500">Last Viewed</dt>
+                    <dd class="mt-1 text-sm text-gray-900">{{ stl_file.last_viewed.strftime('%Y-%m-%d %H:%M:%S') }}</dd>
+                </div>
+                {% endif %}
+            </dl>
+            
+            {% if stl_file.description %}
+            <div class="mt-6">
+                <dt class="text-sm font-medium text-gray-500 mb-2">Description</dt>
+                <dd class="text-sm text-gray-900 bg-gray-50 p-3 rounded">{{ stl_file.description }}</dd>
+            </div>
+            {% endif %}
+            
+            {% if stl_file.tags %}
+            <div class="mt-6">
+                <dt class="text-sm font-medium text-gray-500 mb-2">Tags</dt>
+                <dd class="flex flex-wrap gap-2">
+                    {% for tag in stl_file.tags.split(',') %}
+                    {% if tag.strip() %}
+                    <span class="px-2 py-1 bg-purple-100 text-purple-800 text-xs font-medium rounded">{{ tag.strip() }}</span>
+                    {% endif %}
+                    {% endfor %}
+                </dd>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Actions Card -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">Actions</h2>
+            <div class="space-y-3">
+                {% if download_url %}
+                <a href="{{ download_url }}" 
+                   class="w-full bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition-colors text-center block">
+                    <i class="fas fa-download mr-2"></i>Download File
+                </a>
+                {% else %}
+                <div class="w-full bg-gray-300 text-gray-500 px-4 py-2 rounded text-center">
+                    <i class="fas fa-exclamation-triangle mr-2"></i>File Not Available
+                </div>
+                {% endif %}
+                
+                <button onclick="copyToClipboard('{{ stl_file.id }}')" 
+                        class="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-copy mr-2"></i>Copy File ID
+                </button>
+                
+                <div class="text-center pt-2">
+                    <span class="text-xs text-gray-500">Storage: {{ 'S3' if stl_file.s3_key else 'Local' }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Associated Videos -->
+    {% if stl_file.videos %}
+    <div class="bg-white rounded-lg shadow mb-8">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">Associated Videos ({{ stl_file.videos|length }})</h2>
+        </div>
+        <div class="p-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for video in stl_file.videos %}
+                <div class="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <div class="flex items-center mb-2">
+                        <i class="fas fa-video text-blue-400 mr-2"></i>
+                        <h3 class="font-medium text-gray-900 truncate">{{ video.original_filename }}</h3>
+                    </div>
+                    <p class="text-sm text-gray-500 mb-2">{{ (video.file_size / 1024 / 1024) | round(2) }} MB</p>
+                    {% if video.description %}
+                    <p class="text-sm text-gray-600 mb-3">{{ video.description[:100] }}{% if video.description|length > 100 %}...{% endif %}</p>
+                    {% endif %}
+                    <a href="{{ url_for('admin_view_video_file', file_id=video.id) }}" 
+                       class="text-blue-600 hover:text-blue-800 text-sm font-medium">View Video →</a>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Recent Activity -->
+    <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">File History</h2>
+        </div>
+        <div class="p-6">
+            <div class="space-y-3">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-upload text-green-500"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-gray-900">
+                            File uploaded by <span class="font-medium">{{ stl_file.uploader.email }}</span>
+                        </p>
+                        <p class="text-xs text-gray-500">{{ stl_file.upload_timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                    </div>
+                </div>
+                
+                {% if stl_file.view_count and stl_file.view_count > 0 %}
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-eye text-blue-500"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-gray-900">
+                            Viewed {{ stl_file.view_count }} time{{ 's' if stl_file.view_count != 1 else '' }}
+                        </p>
+                        {% if stl_file.last_viewed %}
+                        <p class="text-xs text-gray-500">Last viewed: {{ stl_file.last_viewed.strftime('%Y-%m-%d %H:%M:%S') }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if stl_file.is_featured %}
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-star text-yellow-500"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-gray-900">Currently featured for tourists</p>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(function() {
+        // Show temporary success message
+        const button = event.target;
+        const originalText = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-check mr-2"></i>Copied!';
+        button.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+        button.classList.add('bg-green-600');
+        
+        setTimeout(function() {
+            button.innerHTML = originalText;
+            button.classList.remove('bg-green-600');
+            button.classList.add('bg-blue-600', 'hover:bg-blue-700');
+        }, 2000);
+    });
+}
+</script>
+{% endblock %}

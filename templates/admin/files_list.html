@@ -1,0 +1,268 @@
+{% extends "admin/base.html" %}
+
+{% block page_title %}Manage Files{% endblock %}
+{% block header_title %}Manage Files{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">File Management</h1>
+            <p class="text-gray-600">Manage your STL files and videos</p>
+        </div>
+        <div class="flex space-x-3">
+            <button onclick="document.getElementById('stlUploadModal').classList.remove('hidden')" 
+                    class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition-colors">
+                <i class="fas fa-cube mr-2"></i>Upload STL
+            </button>
+            <button onclick="document.getElementById('videoUploadModal').classList.remove('hidden')" 
+                    class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors">
+                <i class="fas fa-video mr-2"></i>Upload Video
+            </button>
+        </div>
+    </div>
+
+    <!-- STL Files Section -->
+    <div class="mb-8">
+        <h2 class="text-xl font-semibold text-gray-900 mb-4">STL Files ({{ stl_files|length }})</h2>
+        {% if stl_files %}
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">File</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Views</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uploaded</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for file in stl_files %}
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <i class="fas fa-cube text-purple-400 mr-3"></i>
+                                <div>
+                                    <div class="text-sm font-medium text-gray-900">{{ file.original_filename }}</div>
+                                    {% if file.description %}
+                                    <div class="text-sm text-gray-500">{{ file.description[:50] }}{% if file.description|length > 50 %}...{% endif %}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ (file.file_size / 1024 / 1024) | round(2) }} MB
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ file.view_count or 0 }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ file.upload_timestamp.strftime('%Y-%m-%d %H:%M') }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if file.is_featured %}
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                Featured
+                            </span>
+                            {% else %}
+                            <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
+                                Normal
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                            <a href="{{ url_for('admin_view_stl_file', file_id=file.id) }}" 
+                               class="text-indigo-600 hover:text-indigo-900">View</a>
+                            {% if not file.is_featured %}
+                            <form method="POST" action="{{ url_for('admin_set_featured_file', file_id=file.id) }}" class="inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <button type="submit" class="text-green-600 hover:text-green-900">Feature</button>
+                            </form>
+                            {% endif %}
+                            <form method="POST" action="{{ url_for('admin_delete_stl_file', file_id=file.id) }}" 
+                                  class="inline"
+                                  data-confirm='{"title": "Delete STL File", "message": "Are you sure you want to delete {{ file.original_filename }}? This action cannot be undone.", "action": "Delete"}'>
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <button type="submit" class="text-red-600 hover:text-red-900">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="bg-white rounded-lg border-2 border-dashed border-gray-300 p-8 text-center">
+            <i class="fas fa-cube text-gray-400 text-4xl mb-4"></i>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">No STL files uploaded yet</h3>
+            <p class="text-gray-600 mb-4">Upload your first STL file to get started</p>
+            <button onclick="document.getElementById('stlUploadModal').classList.remove('hidden')" 
+                    class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition-colors">
+                <i class="fas fa-upload mr-2"></i>Upload STL File
+            </button>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Video Files Section -->
+    <div class="mb-8">
+        <h2 class="text-xl font-semibold text-gray-900 mb-4">Video Files ({{ video_files|length }})</h2>
+        {% if video_files %}
+        <div class="bg-white rounded-lg shadow overflow-hidden">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">File</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Associated STL</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uploaded</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    {% for file in video_files %}
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="flex items-center">
+                                <i class="fas fa-video text-blue-400 mr-3"></i>
+                                <div>
+                                    <div class="text-sm font-medium text-gray-900">{{ file.original_filename }}</div>
+                                    {% if file.description %}
+                                    <div class="text-sm text-gray-500">{{ file.description[:50] }}{% if file.description|length > 50 %}...{% endif %}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ (file.file_size / 1024 / 1024) | round(2) }} MB
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {% if file.stl_file %}
+                            <a href="{{ url_for('admin_view_stl_file', file_id=file.associated_stl_id) }}" 
+                               class="text-purple-600 hover:text-purple-900">{{ file.stl_file.original_filename[:20] }}{% if file.stl_file.original_filename|length > 20 %}...{% endif %}</a>
+                            {% else %}
+                            None
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ file.upload_timestamp.strftime('%Y-%m-%d %H:%M') }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                            <a href="{{ url_for('admin_view_video_file', file_id=file.id) }}" 
+                               class="text-indigo-600 hover:text-indigo-900">View</a>
+                            <form method="POST" action="{{ url_for('admin_delete_video_file', file_id=file.id) }}" 
+                                  class="inline"
+                                  data-confirm='{"title": "Delete Video File", "message": "Are you sure you want to delete {{ file.original_filename }}? This action cannot be undone.", "action": "Delete"}'>
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                <button type="submit" class="text-red-600 hover:text-red-900">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="bg-white rounded-lg border-2 border-dashed border-gray-300 p-8 text-center">
+            <i class="fas fa-video text-gray-400 text-4xl mb-4"></i>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">No video files uploaded yet</h3>
+            <p class="text-gray-600 mb-4">Upload your first video file to get started</p>
+            <button onclick="document.getElementById('videoUploadModal').classList.remove('hidden')" 
+                    class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors">
+                <i class="fas fa-upload mr-2"></i>Upload Video File
+            </button>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- STL Upload Modal -->
+<div id="stlUploadModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+    <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Upload STL File</h3>
+        <form action="{{ url_for('upload_stl') }}" method="post" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">STL File</label>
+                <input type="file" name="file" accept=".stl" required 
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500">
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Description (Optional)</label>
+                <textarea name="description" rows="3" 
+                          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"></textarea>
+            </div>
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Tags (Optional)</label>
+                <input type="text" name="tags" placeholder="tag1, tag2, tag3" 
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500">
+            </div>
+            <div class="flex justify-end space-x-3">
+                <button type="button" onclick="document.getElementById('stlUploadModal').classList.add('hidden')" 
+                        class="px-4 py-2 text-gray-600 border border-gray-300 rounded hover:bg-gray-50 transition-colors">Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors">Upload STL</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Video Upload Modal -->
+<div id="videoUploadModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+    <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+        <h3 class="text-lg font-semibold text-gray-900 mb-4">Upload Video File</h3>
+        <form action="{{ url_for('upload_video') }}" method="post" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Video File</label>
+                <input type="file" name="file" accept=".mp4,.avi,.mov,.wmv,.flv,.webm,.mkv" required 
+                       class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Description (Optional)</label>
+                <textarea name="description" rows="3" 
+                          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+            </div>
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Associated STL File (Optional)</label>
+                <select name="stl_id" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">None</option>
+                    {% for stl_file in stl_files %}
+                    <option value="{{ stl_file.id }}">{{ stl_file.original_filename }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex justify-end space-x-3">
+                <button type="button" onclick="document.getElementById('videoUploadModal').classList.add('hidden')" 
+                        class="px-4 py-2 text-gray-600 border border-gray-300 rounded hover:bg-gray-50 transition-colors">Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">Upload Video</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Close modals when clicking outside
+document.addEventListener('click', function(e) {
+    const stlModal = document.getElementById('stlUploadModal');
+    const videoModal = document.getElementById('videoUploadModal');
+    
+    if (e.target === stlModal) {
+        stlModal.classList.add('hidden');
+    }
+    if (e.target === videoModal) {
+        videoModal.classList.add('hidden');
+    }
+});
+
+// ESC key to close modals
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        document.getElementById('stlUploadModal').classList.add('hidden');
+        document.getElementById('videoUploadModal').classList.add('hidden');
+    }
+});
+</script>
+{% endblock %}
