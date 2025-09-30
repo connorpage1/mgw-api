@@ -1780,16 +1780,27 @@ def upload_stl():
     stored_local_path = None
     
     if s3_client:
-        if upload_to_s3(file, s3_key):
-            upload_success = True
-            stored_s3_key = s3_key
-            file.seek(0)  # Reset file pointer
+        try:
+            if upload_to_s3(file, s3_key):
+                upload_success = True
+                stored_s3_key = s3_key
+                # Don't seek after S3 upload as file may be closed
+        except Exception as e:
+            logger.error(f"S3 upload failed: {e}")
+            # Continue to local storage fallback
     
     if not upload_success:
         # Fallback to local storage
-        if save_local_file(file, local_path):
-            upload_success = True
-            stored_local_path = local_path
+        # Reset file pointer if file is still open
+        try:
+            file.seek(0)
+        except ValueError:
+            # File is closed, cannot fallback to local storage
+            logger.error("File is closed, cannot save to local storage")
+        else:
+            if save_local_file(file, local_path):
+                upload_success = True
+                stored_local_path = local_path
     
     if not upload_success:
         log_file_upload(original_filename, 'stl', file_size, current_user.id, False, 'Failed to upload to both S3 and local storage')
