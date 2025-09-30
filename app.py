@@ -2160,7 +2160,7 @@ def pixie_api_past_projects():
     """Public API: Get recent STL files for browsing past projects"""
     try:
         # Get recent STL files (last 10)
-        past_files = STLFile.query.order_by(STLFile.upload_date.desc()).limit(10).all()
+        past_files = STLFile.query.order_by(STLFile.upload_timestamp.desc()).limit(10).all()
         
         if not past_files:
             return jsonify({'projects': []}), 200
@@ -2184,7 +2184,7 @@ def pixie_api_past_projects():
                     'filename': file.original_filename,
                     'description': file.description or "Custom CNC Creation",
                     'size': file.file_size,
-                    'upload_date': file.upload_date.isoformat(),
+                    'upload_date': file.upload_timestamp.isoformat(),
                     'download_url': download_url,
                     'tags': [tag.name for tag in file.tags],
                     'view_count': file.view_count,
