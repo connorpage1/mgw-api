@@ -2197,7 +2197,7 @@ def pixie_api_past_projects():
                     'size': file.file_size,
                     'upload_date': file.upload_timestamp.isoformat(),
                     'download_url': download_url,
-                    'tags': [tag.name for tag in file.tags],
+                    'tags': file.tags.split(',') if file.tags else [],
                     'view_count': file.view_count,
                     'is_featured': file.is_featured
                 })
