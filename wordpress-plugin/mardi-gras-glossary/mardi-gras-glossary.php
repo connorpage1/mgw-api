@@ -3,7 +3,7 @@
  * Plugin Name: Mardi Gras Glossary
  * Plugin URI: https://github.com/your-username/mardi-gras-glossary
  * Description: A comprehensive Mardi Gras terminology glossary with search, filtering, and SEO optimization. Integrates with your Mardi Gras API and Inspiro theme.
- * Version: 1.2.3
+ * Version: 1.2.8
  * Author: Connor Page
  * Author URI: https://connorpage.com
  * License: GPL v2 or later
@@ -24,7 +24,7 @@ if (!defined('ABSPATH')) {
 // Define plugin constants
 define('MGG_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('MGG_PLUGIN_PATH', plugin_dir_path(__FILE__));
-define('MGG_VERSION', '1.2.3');
+define('MGG_VERSION', '1.2.8');
 
 // Main plugin class
 class MardiGrasGlossary {
@@ -51,7 +51,7 @@ class MardiGrasGlossary {
     }
     
     public function init() {
-        // Create custom post type for SEO benefits
+        // Register post types for SEO (hidden from admin)
         $this->register_post_type();
         
         // Add shortcode for main glossary page
@@ -65,37 +65,51 @@ class MardiGrasGlossary {
     public function register_post_type() {
         $args = array(
             'public' => true,
+            'publicly_queryable' => true,
+            'show_ui' => false,  // Hide from admin UI
+            'show_in_menu' => false,  // Hide from admin menu
+            'show_in_admin_bar' => false,  // Hide from admin bar
+            'show_in_nav_menus' => false,  // Hide from nav menus
+            'can_export' => false,  // Don't allow manual export
             'label' => 'Glossary Terms',
             'labels' => array(
                 'name' => 'Glossary Terms',
                 'singular_name' => 'Glossary Term',
-                'add_new' => 'Add New Term',
-                'add_new_item' => 'Add New Glossary Term',
-                'edit_item' => 'Edit Glossary Term',
-                'new_item' => 'New Glossary Term',
-                'view_item' => 'View Glossary Term',
-                'search_items' => 'Search Glossary Terms',
-                'not_found' => 'No glossary terms found',
-                'not_found_in_trash' => 'No glossary terms found in trash'
             ),
             'supports' => array('title', 'editor', 'excerpt', 'custom-fields'),
             'has_archive' => false,
             'rewrite' => array('slug' => 'mardi-gras/glossary', 'with_front' => false),
-            'show_in_rest' => true,
-            'menu_icon' => 'dashicons-book-alt'
+            'show_in_rest' => true,  // Keep for SEO and potential headless use
+            'capability_type' => 'post',
+            'capabilities' => array(
+                'create_posts' => 'do_not_allow', // Prevents manual creation
+            ),
+            'map_meta_cap' => true,
         );
         
         register_post_type('mgg_term', $args);
         
-        // Register taxonomy for categories
+        // Register taxonomy for categories (hidden from admin)
         register_taxonomy('mgg_category', 'mgg_term', array(
             'hierarchical' => true,
+            'public' => true,
+            'publicly_queryable' => true,
+            'show_ui' => false,  // Hide from admin UI
+            'show_in_menu' => false,  // Hide from admin menu
+            'show_admin_column' => false,  // Don't show in post list
+            'show_in_nav_menus' => false,  // Hide from nav menus
             'labels' => array(
                 'name' => 'Glossary Categories',
                 'singular_name' => 'Glossary Category'
             ),
             'rewrite' => array('slug' => 'mardi-gras/glossary/category'),
-            'show_in_rest' => true
+            'show_in_rest' => true,  // Keep for SEO
+            'capabilities' => array(
+                'manage_terms' => 'do_not_allow',
+                'edit_terms' => 'do_not_allow',
+                'delete_terms' => 'do_not_allow',
+                'assign_terms' => 'do_not_allow',
+            ),
         ));
     }
     
@@ -436,12 +450,18 @@ class MardiGrasGlossary {
         add_option('mgg_api_url', 'https://api.mardigrasworld.com');
         add_option('mgg_cache_duration', 3600);
         
+        // Schedule sync for SEO posts
+        $this->schedule_sync();
+        
         // Set activation notice
         set_transient('mgg_activation_notice', true, 30);
     }
     
     public function deactivate() {
         flush_rewrite_rules();
+        
+        // Clear scheduled sync
+        wp_clear_scheduled_hook('mgg_sync_posts');
     }
     
     // Clear all cache helper function
@@ -460,10 +480,86 @@ class MardiGrasGlossary {
             delete_transient(str_replace('*', '', $pattern));
         }
     }
+    
+    // Sync API data to WordPress posts for SEO (runs in background)
+    public function sync_api_to_posts() {
+        // Get all terms from API
+        $terms_data = $this->fetch_terms(array('limit' => 1000));
+        $terms = $terms_data['terms'] ?? array();
+        
+        // Get all categories from API
+        $categories_data = $this->fetch_categories();
+        $categories = $categories_data['categories'] ?? array();
+        
+        // Create/update taxonomy terms first
+        foreach ($categories as $category) {
+            $existing_term = get_term_by('slug', $category['slug'], 'mgg_category');
+            if (!$existing_term) {
+                wp_insert_term(
+                    $category['name'],
+                    'mgg_category',
+                    array(
+                        'slug' => $category['slug'],
+                        'description' => $category['description'] ?? ''
+                    )
+                );
+            }
+        }
+        
+        // Create/update posts for each term
+        foreach ($terms as $term_data) {
+            $existing_post = get_page_by_path($term_data['slug'], OBJECT, 'mgg_term');
+            
+            $post_data = array(
+                'post_title' => $term_data['term'],
+                'post_content' => $term_data['definition'],
+                'post_excerpt' => wp_trim_words($term_data['definition'], 20),
+                'post_status' => 'publish',
+                'post_type' => 'mgg_term',
+                'post_name' => $term_data['slug'],
+                'meta_input' => array(
+                    'mgg_pronunciation' => $term_data['pronunciation'] ?? '',
+                    'mgg_difficulty' => $term_data['difficulty'] ?? '',
+                    'mgg_is_featured' => $term_data['is_featured'] ?? false,
+                    'mgg_view_count' => $term_data['view_count'] ?? 0,
+                    'mgg_example' => $term_data['example'] ?? '',
+                    'mgg_api_sync' => current_time('mysql') // Mark as synced
+                )
+            );
+            
+            if ($existing_post) {
+                $post_data['ID'] = $existing_post->ID;
+                wp_update_post($post_data);
+                $post_id = $existing_post->ID;
+            } else {
+                $post_id = wp_insert_post($post_data);
+            }
+            
+            // Set category taxonomy
+            if ($post_id && !is_wp_error($post_id) && isset($term_data['category'])) {
+                wp_set_object_terms($post_id, $term_data['category'], 'mgg_category');
+            }
+        }
+        
+        // Update sync timestamp
+        update_option('mgg_last_sync', current_time('mysql'));
+        
+        return count($terms) . ' terms synced to WordPress posts for SEO.';
+    }
+    
+    // Schedule background sync
+    public function schedule_sync() {
+        if (!wp_next_scheduled('mgg_sync_posts')) {
+            wp_schedule_event(time(), 'hourly', 'mgg_sync_posts');
+        }
+    }
 }
 
 // Initialize the plugin
-new MardiGrasGlossary();
+$mgg_plugin = new MardiGrasGlossary();
+
+// Scheduled sync hook
+add_action('mgg_sync_posts', array($mgg_plugin, 'sync_api_to_posts'));
 
 // AJAX handlers
 add_action('wp_ajax_mgg_search_terms', 'mgg_ajax_search_terms');

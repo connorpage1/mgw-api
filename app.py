@@ -2155,6 +2155,48 @@ def pixie_api_featured():
         logger.error(f"Error getting featured file: {e}")
         return jsonify({'error': 'Internal server error'}), 500
 
+@app.route('/pixie/api/past-projects', methods=['GET'])
+def pixie_api_past_projects():
+    """Public API: Get recent STL files for browsing past projects"""
+    try:
+        # Get recent STL files (last 10)
+        past_files = STLFile.query.order_by(STLFile.upload_date.desc()).limit(10).all()
+        
+        if not past_files:
+            return jsonify({'projects': []}), 200
+        
+        projects = []
+        for file in past_files:
+            # Generate download URL
+            download_url = None
+            if file.s3_key and s3_client:
+                try:
+                    download_url = generate_presigned_url(file.s3_key, expiration=3600)
+                except Exception as e:
+                    logger.error(f"Error generating presigned URL: {e}")
+            
+            if not download_url and file.local_path:
+                download_url = f"/pixie/api/download/stl/{file.id}"
+            
+            if download_url:  # Only include files that have valid download URLs
+                projects.append({
+                    'id': file.id,
+                    'filename': file.original_filename,
+                    'description': file.description or "Custom CNC Creation",
+                    'size': file.file_size,
+                    'upload_date': file.upload_date.isoformat(),
+                    'download_url': download_url,
+                    'tags': [tag.name for tag in file.tags],
+                    'view_count': file.view_count,
+                    'is_featured': file.is_featured
+                })
+        
+        return jsonify({'projects': projects})
+        
+    except Exception as e:
+        logger.error(f"Error getting past projects: {e}")
+        return jsonify({'error': 'Internal server error'}), 500
+
 @app.route('/pixie/api/download/stl/<file_id>', methods=['GET'])
 def pixie_api_download_stl(file_id):
     """Public API: Download STL file for Pixie viewer"""

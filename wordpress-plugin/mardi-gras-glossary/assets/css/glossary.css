@@ -628,18 +628,32 @@
 }
 
 .mgg-terms-list .mgg-term-card {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    align-items: center;
+    display: flex;
     padding: 20px 25px;
+    gap: 30px;
+    min-height: 100px;
+}
+
+/* Main content wrapper for list view */
+.mgg-terms-list .mgg-term-card > :not(.mgg-term-footer) {
+    flex: 1;
 }
 
 .mgg-terms-list .mgg-term-content {
+    margin-bottom: 12px;
+}
+
+.mgg-terms-list .mgg-difficulty-section {
     margin-bottom: 0;
 }
 
 .mgg-terms-list .mgg-term-footer {
-    margin-left: 30px;
+    margin: 0;
+    flex-shrink: 0;
+    align-self: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 /* =============================================================================
@@ -1190,6 +1204,26 @@
 .mgg-search-similar:hover {
     background: var(--inspiro-accent-color, #6f42c1);
     color: white;
+}
+
+/* =============================================================================
+   Category Page Styles
+   ========================================================================== */
+
+.mgg-category-search-section {
+    margin-bottom: 24px;
+    background: var(--mgg-white);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: var(--mgg-shadow);
+    border: 1px solid var(--mgg-border);
+}
+
+.mgg-category-search-section h3 {
+    margin: 0 0 16px 0;
+    color: var(--mgg-text);
+    font-size: 1.1rem;
+    font-weight: 600;
 }
 
 /* =============================================================================

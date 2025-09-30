@@ -87,21 +87,21 @@ $glossary_url = home_url('/mardi-gras/glossary/');
         </div>
     </div>
     
-    <!-- Category Controls -->
-    <div class="mgg-category-controls">
-        <div class="mgg-search-bar">
-            <input type="text" 
-                   id="mgg-category-search" 
-                   placeholder="Search within <?php echo esc_attr($current_category['name']); ?>..." 
-                   class="mgg-search-field">
-            <button id="mgg-category-search-btn" class="mgg-search-button">
-                <span class="mgg-search-icon"></span>
-            </button>
+    <!-- Results Header -->
+    <div class="mgg-results-header">
+        <div class="mgg-results-info">
+            <span id="mgg-results-count">
+                Showing <strong id="mgg-count-current"><?php echo $total_count; ?></strong> 
+                terms in <?php echo esc_html($current_category['name']); ?>
+            </span>
         </div>
-        
-        <div class="mgg-category-filters">
-            <div class="mgg-filter-group">
-                <label for="mgg-category-difficulty">Difficulty:</label>
+    </div>
+    
+    <!-- Controls Row (matching main glossary) -->
+    <div class="mgg-controls-row">
+        <div class="mgg-inline-filters">
+            <div class="mgg-filter-item">
+                <label for="mgg-category-difficulty" class="mgg-filter-label">Difficulty:</label>
                 <select id="mgg-category-difficulty" class="mgg-filter-select">
                     <option value="">All Levels</option>
                     <option value="tourist">Tourist</option>
@@ -110,23 +110,37 @@ $glossary_url = home_url('/mardi-gras/glossary/');
                 </select>
             </div>
             
-            <div class="mgg-filter-group">
-                <label for="mgg-category-sort">Sort by:</label>
+            <div class="mgg-filter-item">
+                <label for="mgg-category-sort" class="mgg-filter-label">Sort by:</label>
                 <select id="mgg-category-sort" class="mgg-filter-select">
-                    <option value="term">A-Z</option>
+                    <option value="term">Alphabetical</option>
                     <option value="difficulty">Difficulty</option>
                     <option value="views">Most Popular</option>
                 </select>
             </div>
         </div>
         
-        <!-- View Toggle -->
         <div class="mgg-view-controls">
-            <button id="mgg-grid-view" class="mgg-view-btn mgg-view-active" data-view="grid">
-                <span class="mgg-grid-icon">⊞</span> Grid
+            <button id="mgg-grid-view" class="mgg-view-btn mgg-view-active" data-view="grid" title="Grid View">
+                <span class="material-icons">grid_view</span>
+                <span class="mgg-view-text">Grid</span>
             </button>
-            <button id="mgg-list-view" class="mgg-view-btn" data-view="list">
-                <span class="mgg-list-icon">☰</span> List
+            <button id="mgg-list-view" class="mgg-view-btn" data-view="list" title="List View">
+                <span class="material-icons">view_list</span>
+                <span class="mgg-view-text">List</span>
+            </button>
+        </div>
+    </div>
+    
+    <!-- Search Bar -->
+    <div class="mgg-category-search-section">
+        <div class="mgg-search-container">
+            <input type="text" 
+                   id="mgg-category-search" 
+                   placeholder="Search within <?php echo esc_attr($current_category['name']); ?>..." 
+                   class="mgg-search-field">
+            <button id="mgg-category-search-btn" class="mgg-search-btn">
+                <span class="material-icons">search</span>
             </button>
         </div>
     </div>
@@ -217,6 +231,13 @@ jQuery(document).ready(function($) {
         }, 300);
     });
     
+    // Search button click
+    $('#mgg-category-search-btn').on('click', function(e) {
+        e.preventDefault();
+        const searchTerm = $('#mgg-category-search').val().toLowerCase();
+        filterCategoryTerms(searchTerm, $('#mgg-category-difficulty').val(), $('#mgg-category-sort').val());
+    });
+    
     // Filter by difficulty
     $('#mgg-category-difficulty').on('change', function() {
         const difficulty = $(this).val();
@@ -304,35 +325,37 @@ jQuery(document).ready(function($) {
     
     function createCategoryTermCard(term) {
         const termUrl = '<?php echo home_url('/mardi-gras/glossary/'); ?>' + term.slug + '/';
+        const categoryUrl = '<?php echo home_url('/mardi-gras/glossary/category/' . $current_category['slug'] . '/'); ?>';
+        const categoryName = '<?php echo esc_js($current_category['name']); ?>';
         const difficultyClass = 'mgg-difficulty-' + term.difficulty.toLowerCase();
         
         let definition = term.definition;
-        if (definition.length > 150) {
-            definition = definition.substring(0, 150) + '...';
+        if (definition.length > 120) {
+            definition = definition.substring(0, 120) + '...';
         }
         
         return `
-            <article class="mgg-term-card ${difficultyClass}">
+            <article class="mgg-term-card ${difficultyClass}" data-term-id="${term.id}">
+                <div class="mgg-card-top">
+                    <a href="${categoryUrl}" class="mgg-category-badge">${categoryName}</a>
+                    <span class="mgg-pronunciation-top">${term.pronunciation}</span>
+                </div>
                 <header class="mgg-term-header">
                     <h3 class="mgg-term-title">
                         <a href="${termUrl}" class="mgg-term-link">${term.term}</a>
                     </h3>
-                    <div class="mgg-term-meta">
-                        <span class="mgg-term-pronunciation">${term.pronunciation}</span>
-                        <div class="mgg-term-badges">
-                            <span class="mgg-difficulty-badge mgg-difficulty-${term.difficulty.toLowerCase()}">
-                                ${term.difficulty.charAt(0).toUpperCase() + term.difficulty.slice(1)}
-                            </span>
-                            ${term.is_featured ? '<span class="mgg-featured-badge">⭐ Featured</span>' : ''}
-                        </div>
-                    </div>
                 </header>
                 <div class="mgg-term-content">
                     <div class="mgg-term-definition">${definition}</div>
                 </div>
+                <div class="mgg-difficulty-section">
+                    <span class="mgg-difficulty-label">Difficulty:</span>
+                    <span class="mgg-difficulty-badge mgg-difficulty-${term.difficulty.toLowerCase()}">
+                        ${term.difficulty.charAt(0).toUpperCase() + term.difficulty.slice(1)}
+                    </span>
+                    ${term.is_featured ? '<span class="mgg-featured-badge">⭐ Featured</span>' : ''}
+                </div>
                 <footer class="mgg-term-footer">
-                    <div class="mgg-term-stats">
-                    </div>
                     <a href="${termUrl}" class="mgg-read-more">Learn More →</a>
                 </footer>
             </article>

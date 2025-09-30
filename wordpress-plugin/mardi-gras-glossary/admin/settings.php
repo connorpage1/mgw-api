@@ -31,6 +31,14 @@ if (isset($_POST['clear_cache'])) {
     echo '<div class="notice notice-success"><p>Cache cleared successfully!</p></div>';
 }
 
+// Handle manual sync for SEO posts
+if (isset($_POST['sync_posts'])) {
+    check_admin_referer('mgg_sync_nonce');
+    
+    $result = $glossary->sync_api_to_posts();
+    echo '<div class="notice notice-success"><p>' . esc_html($result) . '</p></div>';
+}
+
 // Get current settings
 $api_url = get_option('mgg_api_url', 'https://api.mardigrasworld.com');
 $cache_duration = get_option('mgg_cache_duration', 3600);
@@ -48,7 +56,7 @@ $api_working = !empty($api_test['categories']);
     <div class="mgg-admin-header">
         <div class="mgg-admin-title">
             <h1>🎭 Mardi Gras Glossary</h1>
-            <p class="mgg-version">Version 1.1.7 by Connor Page</p>
+            <p class="mgg-version">Version 1.2.7 by Connor Page</p>
         </div>
         <div class="mgg-admin-links">
             <a href="https://github.com/your-username/mardi-gras-glossary#readme" target="_blank" class="button button-secondary">
@@ -149,6 +157,26 @@ $api_working = !empty($api_test['categories']);
         </form>
     </div>
     
+    <!-- SEO Sync Management -->
+    <div class="card">
+        <h2>SEO Post Sync</h2>
+        <p>Sync API data to WordPress posts for better SEO. This creates hidden WordPress posts that search engines can index while keeping the API as the single source of truth.</p>
+        
+        <?php
+        $last_sync = get_option('mgg_last_sync');
+        if ($last_sync) {
+            echo '<p><strong>Last Sync:</strong> ' . date('M j, Y g:i A', strtotime($last_sync)) . '</p>';
+        }
+        ?>
+        
+        <form method="post" action="" style="display: inline;">
+            <?php wp_nonce_field('mgg_sync_nonce'); ?>
+            <input type="submit" name="sync_posts" class="button button-secondary" value="Sync Now for SEO" />
+        </form>
+        
+        <p><small><strong>Note:</strong> Automatic sync runs hourly. Manual sync is useful when you've added new terms to your API.</small></p>
+    </div>
+    
     <!-- Usage Instructions -->
     <div class="card">
         <h2>How to Use</h2>
@@ -170,8 +198,15 @@ $api_working = !empty($api_test['categories']);
             <li>Creates SEO-friendly URLs for all terms</li>
             <li>Adds proper meta descriptions</li>
             <li>Includes structured data markup</li>
+            <li>Syncs API data to hidden WordPress posts for search engine indexing</li>
+            <li>Maintains API as single source of truth while providing SEO benefits</li>
             <li>Generates XML sitemaps (if using an SEO plugin)</li>
         </ul>
+        
+        <div style="background: #e7f3ff; border: 1px solid #b3d4fc; border-radius: 4px; padding: 15px; margin: 15px 0;">
+            <strong>🔍 New SEO Features (v1.2.7):</strong>
+            <p>WordPress posts are now automatically created from your API data but hidden from admin interface. This provides search engines with crawlable content while ensuring your API remains the authoritative source. The admin interface for creating terms/categories has been removed to prevent data conflicts.</p>
+        </div>
     </div>
     
     <!-- Statistics -->
