@@ -85,7 +85,34 @@ cors = CORS(app, origins=ALLOWED_ORIGINS, resources={
     r"/*": {"origins": ALLOWED_ORIGINS}  # Default restriction for all other routes
 })
 mail = Mail(app)
+
+# CSRF Protection Configuration
+app.config['WTF_CSRF_TIME_LIMIT'] = 28800  # 8 hours in seconds (8 * 60 * 60)
+app.config['WTF_CSRF_SSL_STRICT'] = False   # Allow CSRF over HTTP in development
 csrf = CSRFProtect(app)
+
+# CSRF Error Handler
+@app.errorhandler(400)
+def handle_bad_request(e):
+    """Handle 400 errors including CSRF token errors"""
+    error_description = str(e.description) if hasattr(e, 'description') else str(e)
+    
+    # Check if this is a CSRF error
+    if 'csrf' in error_description.lower() or 'token' in error_description.lower():
+        logger.warning(f"CSRF error: {error_description} from IP: {request.remote_addr}")
+        
+        if request.is_json or 'application/json' in request.headers.get('Accept', ''):
+            return jsonify({
+                'error': 'CSRF token validation failed', 
+                'csrf_error': True,
+                'message': 'Security token expired. Please refresh and try again.'
+            }), 400
+        else:
+            flash('Security token expired. Please refresh the page and try again.', 'error')
+            return redirect(request.referrer or url_for('admin_dashboard'))
+    
+    # Handle other 400 errors
+    return f"Bad Request: {error_description}", 400
 
 # Setup logging for file uploads
 logging.basicConfig(level=logging.INFO)
@@ -726,6 +753,26 @@ def admin_main_dashboard():
         # Add more as needed
     }
     return render_template('admin/main_dashboard.html', stats=stats)
+
+@app.route('/admin/csrf-token', methods=['GET'])
+@admin_required
+def admin_refresh_csrf_token():
+    """Endpoint to refresh CSRF token for long-running admin sessions"""
+    try:
+        from flask_wtf.csrf import generate_csrf
+        new_token = generate_csrf()
+        
+        return jsonify({
+            'success': True,
+            'csrf_token': new_token,
+            'message': 'CSRF token refreshed successfully'
+        })
+    except Exception as e:
+        logger.error(f"Error refreshing CSRF token: {e}")
+        return jsonify({
+            'success': False,
+            'error': 'Failed to refresh CSRF token'
+        }), 500
 
 @app.route('/admin/glossary/dashboard')
 @admin_required
