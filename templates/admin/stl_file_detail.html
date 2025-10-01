@@ -64,6 +64,16 @@
                     <dd class="mt-1 text-sm text-gray-900">{{ stl_file.uploader.email }}</dd>
                 </div>
                 <div>
+                    <dt class="text-sm font-medium text-gray-500">File Type</dt>
+                    <dd class="mt-1 text-sm text-gray-900">
+                        {% if stl_file.is_partial %}
+                        <span class="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">Partial File</span>
+                        {% else %}
+                        <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded">Full File</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
                     <dt class="text-sm font-medium text-gray-500">View Count</dt>
                     <dd class="mt-1 text-sm text-gray-900">{{ stl_file.view_count or 0 }}</dd>
                 </div>
@@ -122,6 +132,58 @@
             </div>
         </div>
     </div>
+
+    <!-- File Relationships -->
+    {% if stl_file.parent_file or stl_file.child_files %}
+    <div class="bg-white rounded-lg shadow mb-8">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold text-gray-900">File Relationships</h2>
+        </div>
+        <div class="p-6">
+            {% if stl_file.parent_file %}
+            <div class="mb-4">
+                <h3 class="text-sm font-medium text-gray-500 mb-2">Parent File</h3>
+                <div class="border rounded-lg p-4 bg-green-50">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center">
+                            <i class="fas fa-cube text-green-600 mr-3"></i>
+                            <div>
+                                <div class="font-medium text-gray-900">{{ stl_file.parent_file.original_filename }}</div>
+                                <div class="text-sm text-gray-500">{{ (stl_file.parent_file.file_size / 1024 / 1024) | round(2) }} MB</div>
+                            </div>
+                        </div>
+                        <a href="{{ url_for('admin_view_stl_file', file_id=stl_file.parent_file.id) }}" 
+                           class="text-green-600 hover:text-green-800 text-sm font-medium">View →</a>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
+            {% if stl_file.child_files %}
+            <div>
+                <h3 class="text-sm font-medium text-gray-500 mb-2">Child Files ({{ stl_file.child_files|length }})</h3>
+                <div class="space-y-2">
+                    {% for child in stl_file.child_files %}
+                    <div class="border rounded-lg p-4 bg-blue-50">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <i class="fas fa-cube text-blue-600 mr-3"></i>
+                                <div>
+                                    <div class="font-medium text-gray-900">{{ child.original_filename }}</div>
+                                    <div class="text-sm text-gray-500">{{ (child.file_size / 1024 / 1024) | round(2) }} MB</div>
+                                </div>
+                            </div>
+                            <a href="{{ url_for('admin_view_stl_file', file_id=child.id) }}" 
+                               class="text-blue-600 hover:text-blue-800 text-sm font-medium">View →</a>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
 
     <!-- Associated Videos -->
     {% if stl_file.videos %}

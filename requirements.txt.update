@@ -1,0 +1,2 @@
+# Add to existing requirements.txt:
+requests>=2.28.0  # For screenshot service HTTP calls

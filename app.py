@@ -372,15 +372,38 @@ class STLFile(db.Model):
     # User who uploaded the file
     uploaded_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     
+    # Parent-child file relationships
+    parent_file_id = db.Column(db.String(36), db.ForeignKey('stl_files.id'), nullable=True)
+    is_partial = db.Column(db.Boolean, default=False)
+    
+    # Screenshot for quick preview
+    screenshot_s3_key = db.Column(db.String(255), nullable=True)  # S3 key for screenshot image
+    
     # Relationships
     videos = db.relationship('VideoFile', backref='stl_file', lazy=True, cascade='all, delete-orphan')
     uploader = db.relationship('User', backref='uploaded_stl_files')
+    parent_file = db.relationship('STLFile', remote_side=[id], backref='child_files')
     
     # Display flags
     is_featured = db.Column(db.Boolean, default=False)  # For tourist display
     
     def __repr__(self):
         return f'<STLFile {self.original_filename}>'
+    
+    def get_screenshot_url(self):
+        """Generate presigned URL for screenshot if it exists"""
+        if not self.screenshot_s3_key or not s3_client:
+            return None
+        
+        try:
+            return s3_client.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': app.config['S3_BUCKET'], 'Key': self.screenshot_s3_key},
+                ExpiresIn=86400  # 24 hours
+            )
+        except Exception as e:
+            logger.error(f"Error generating screenshot URL: {e}")
+            return None
     
     def to_dict(self):
         return {
@@ -393,7 +416,12 @@ class STLFile(db.Model):
             'description': self.description,
             'tags': self.tags.split(',') if self.tags else [],
             'is_featured': self.is_featured,
-            'uploaded_by': self.uploader.email if self.uploader else None
+            'uploaded_by': self.uploader.email if self.uploader else None,
+            'is_partial': self.is_partial,
+            'parent_file_id': self.parent_file_id,
+            'parent_file': self.parent_file.original_filename if self.parent_file else None,
+            'child_files': [{'id': child.id, 'filename': child.original_filename} for child in self.child_files],
+            'screenshot_url': self.get_screenshot_url()
         }
 
 class VideoFile(db.Model):
@@ -528,6 +556,100 @@ def save_local_file(file_obj, local_path):
     except Exception as e:
         logger.error(f"Error saving file locally: {e}")
         return False
+
+def generate_stl_screenshot(stl_file_id, stl_s3_key=None, stl_local_path=None):
+    """Generate screenshot by calling pixie-viewer-v2 service"""
+    try:
+        import requests
+        import tempfile
+        import io
+        
+        # Determine the STL file URL for pixie-viewer
+        if stl_s3_key and s3_client:
+            # Generate presigned URL for STL file
+            stl_url = s3_client.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': app.config['S3_BUCKET'], 'Key': stl_s3_key},
+                ExpiresIn=3600  # 1 hour
+            )
+        elif stl_local_path:
+            # For local files, we'd need to serve them temporarily
+            # This is more complex and would require a local web server
+            logger.warning("Screenshot generation from local files not yet implemented")
+            return None
+        else:
+            logger.error("No valid STL source for screenshot generation")
+            return None
+        
+        # Call screenshot generation service
+        # For now, we'll create a placeholder implementation
+        # You would call a headless browser service or pixie-viewer API
+        screenshot_data = generate_screenshot_via_headless_browser(stl_url)
+        
+        if screenshot_data:
+            # Upload screenshot to S3
+            timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+            screenshot_s3_key = f"screenshots/{timestamp}_{stl_file_id}.png"
+            
+            # Upload screenshot to S3
+            screenshot_file = io.BytesIO(screenshot_data)
+            if upload_to_s3(screenshot_file, screenshot_s3_key):
+                return screenshot_s3_key
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error generating screenshot: {e}")
+        return None
+
+def generate_screenshot_via_headless_browser(stl_url):
+    """Generate screenshot using pixie-v2 screenshot service"""
+    try:
+        import requests
+        import base64
+        
+        # Call pixie-v2 screenshot service
+        screenshot_service_url = os.environ.get(
+            'PIXIE_SCREENSHOT_URL', 
+            'http://localhost:3000/api/screenshot'
+        )
+        
+        logger.info(f"Requesting screenshot from pixie-v2 service for: {stl_url}")
+        
+        # Make request to screenshot service
+        response = requests.post(
+            screenshot_service_url,
+            json={"stl_url": stl_url},
+            timeout=60  # Allow up to 60 seconds for screenshot generation
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('success') and data.get('screenshot'):
+                # Decode base64 screenshot
+                screenshot_bytes = base64.b64decode(data['screenshot'])
+                logger.info(f"Successfully generated screenshot ({len(screenshot_bytes)} bytes)")
+                return screenshot_bytes
+            else:
+                logger.error(f"Screenshot service returned error: {data.get('error', 'Unknown error')}")
+        else:
+            logger.error(f"Screenshot service HTTP error: {response.status_code} - {response.text}")
+        
+        return None
+        
+    except requests.exceptions.Timeout:
+        logger.error("Screenshot generation timed out (60s limit)")
+        return None
+    except requests.exceptions.ConnectionError:
+        service_url = screenshot_service_url.replace('/api/screenshot', '')
+        logger.error(f"Could not connect to screenshot service at {service_url}. Check PIXIE_SCREENSHOT_URL environment variable.")
+        return None
+    except ImportError:
+        logger.error("requests library not available for screenshot generation")
+        return None
+    except Exception as e:
+        logger.error(f"Error in headless browser screenshot: {e}")
+        return None
 
 def generate_presigned_url(s3_key, expiration=3600):
     """Generate presigned URL for S3 object"""
@@ -1807,6 +1929,10 @@ def upload_stl():
         flash('Failed to upload file', 'error')
         return redirect(url_for('admin_files_list'))
     
+    # Handle parent file relationship
+    parent_file_id = request.form.get('parent_file_id')
+    is_partial = request.form.get('is_partial') == 'true'
+    
     # Save to database
     try:
         stl_file = STLFile(
@@ -1817,10 +1943,37 @@ def upload_stl():
             file_size=file_size,
             description=request.form.get('description', ''),
             tags=request.form.get('tags', ''),
-            uploaded_by=current_user.id
+            uploaded_by=current_user.id,
+            parent_file_id=parent_file_id if parent_file_id else None,
+            is_partial=is_partial
         )
         db.session.add(stl_file)
         db.session.commit()
+        
+        # Generate screenshot asynchronously (in background)
+        # Use threading to not block the upload response
+        import threading
+        
+        def generate_screenshot_async():
+            try:
+                screenshot_s3_key = generate_stl_screenshot(file_id, stored_s3_key, stored_local_path)
+                if screenshot_s3_key:
+                    # Update database in a new session
+                    with app.app_context():
+                        stl_file_update = STLFile.query.get(file_id)
+                        if stl_file_update:
+                            stl_file_update.screenshot_s3_key = screenshot_s3_key
+                            db.session.commit()
+                            logger.info(f"Screenshot generated for STL file {file_id}: {screenshot_s3_key}")
+                else:
+                    logger.warning(f"Failed to generate screenshot for STL file {file_id}")
+            except Exception as e:
+                logger.error(f"Error generating screenshot for STL file {file_id}: {e}")
+        
+        # Start screenshot generation in background thread
+        screenshot_thread = threading.Thread(target=generate_screenshot_async)
+        screenshot_thread.daemon = True
+        screenshot_thread.start()
         
         log_file_upload(original_filename, 'stl', file_size, current_user.id, True)
         flash(f'STL file "{original_filename}" uploaded successfully', 'success')
@@ -2152,7 +2305,8 @@ def pixie_api_featured():
             'view_count': featured_file.view_count or 0,
             'description': featured_file.description or '',
             'tags': featured_file.tags.split(',') if featured_file.tags else [],
-            'download_url': download_url
+            'download_url': download_url,
+            'screenshot_url': featured_file.get_screenshot_url()
         }
         
         # Update view count
@@ -2197,9 +2351,12 @@ def pixie_api_past_projects():
                     'size': file.file_size,
                     'upload_date': file.upload_timestamp.isoformat(),
                     'download_url': download_url,
+                    'screenshot_url': file.get_screenshot_url(),
                     'tags': file.tags.split(',') if file.tags else [],
                     'view_count': file.view_count,
-                    'is_featured': file.is_featured
+                    'is_featured': file.is_featured,
+                    'is_partial': file.is_partial,
+                    'parent_file_id': file.parent_file_id
                 })
         
         return jsonify({'projects': projects})
