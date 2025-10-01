@@ -2756,6 +2756,14 @@ def init_production_app():
                         conn.execute(text("ALTER TABLE stl_files ADD COLUMN parent_file_id VARCHAR(36)"))
                         conn.commit()
                         print("✅ Added parent_file_id column")
+                    else:
+                        # Check if parent_file_id is the wrong type and fix it
+                        result = conn.execute(text("SELECT data_type FROM information_schema.columns WHERE table_name = 'stl_files' AND column_name = 'parent_file_id'"))
+                        current_type = result.fetchone()
+                        if current_type and current_type[0] == 'integer':
+                            conn.execute(text("ALTER TABLE stl_files ALTER COLUMN parent_file_id TYPE VARCHAR(36)"))
+                            conn.commit()
+                            print("✅ Fixed parent_file_id column type to VARCHAR(36)")
                     
                     if 'is_partial' not in existing_columns:
                         conn.execute(text("ALTER TABLE stl_files ADD COLUMN is_partial BOOLEAN DEFAULT FALSE"))
