@@ -2661,7 +2661,7 @@ def admin_account():
     return render_template('admin/account.html', user=user, message=message, error=error)
 
 # Database diagnostic endpoint
-@app.route('/admin/db-info')
+@app.route('/db-debug')
 def db_info():
     """Show database connection and table info for debugging"""
     try:
