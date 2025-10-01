@@ -2714,19 +2714,15 @@ def migrate_database():
     
     if request.method == 'POST':
         try:
-            # Recreate STL tables with new schema to ensure compatibility
             with db.engine.connect() as conn:
-                # Drop and recreate stl_file table
-                conn.execute(text("DROP TABLE IF EXISTS stl_file"))
-                conn.commit()
+                # Fix parent_file_id column type specifically
+                try:
+                    conn.execute(text("ALTER TABLE stl_files ALTER COLUMN parent_file_id TYPE VARCHAR(36) USING parent_file_id::text"))
+                    conn.commit()
+                    flash('Fixed parent_file_id column type to VARCHAR(36)', 'success')
+                except Exception as col_error:
+                    flash(f'Column type fix error: {str(col_error)}', 'warning')
                 
-            # Recreate all tables with updated schema
-            db.create_all()
-            
-            # Recreate default data
-            init_default_data()
-            
-            flash('Database schema updated successfully! All tables recreated with new schema.', 'success')
             return redirect(url_for('admin_dashboard'))
             
         except Exception as e:
