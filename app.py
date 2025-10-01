@@ -2670,45 +2670,24 @@ def migrate_database():
     
     if request.method == 'POST':
         try:
-            # Add missing columns to STLFile table
+            # Recreate STL tables with new schema to ensure compatibility
             with db.engine.connect() as conn:
-                # Check if columns exist and add them if they don't
-                try:
-                    conn.execute(text("ALTER TABLE stl_file ADD COLUMN parent_file_id INTEGER"))
-                    print("✅ Added parent_file_id column")
-                except Exception as e:
-                    if "already exists" not in str(e).lower():
-                        print(f"⚠️ parent_file_id column issue: {e}")
-                
-                try:
-                    conn.execute(text("ALTER TABLE stl_file ADD COLUMN is_partial BOOLEAN DEFAULT FALSE"))
-                    print("✅ Added is_partial column")
-                except Exception as e:
-                    if "already exists" not in str(e).lower():
-                        print(f"⚠️ is_partial column issue: {e}")
-                
-                try:
-                    conn.execute(text("ALTER TABLE stl_file ADD COLUMN screenshot_s3_key VARCHAR(500)"))
-                    print("✅ Added screenshot_s3_key column")
-                except Exception as e:
-                    if "already exists" not in str(e).lower():
-                        print(f"⚠️ screenshot_s3_key column issue: {e}")
-                
-                # Add foreign key constraint
-                try:
-                    conn.execute(text("ALTER TABLE stl_file ADD CONSTRAINT fk_parent_file FOREIGN KEY (parent_file_id) REFERENCES stl_file(id)"))
-                    print("✅ Added parent_file foreign key constraint")
-                except Exception as e:
-                    if "already exists" not in str(e).lower():
-                        print(f"⚠️ Foreign key constraint issue: {e}")
-                
+                # Drop and recreate stl_file table
+                conn.execute(text("DROP TABLE IF EXISTS stl_file"))
                 conn.commit()
+                
+            # Recreate all tables with updated schema
+            db.create_all()
             
-            flash('Database migration completed successfully!', 'success')
+            # Recreate default data
+            init_default_data()
+            
+            flash('Database schema updated successfully! All tables recreated with new schema.', 'success')
             return redirect(url_for('admin_dashboard'))
             
         except Exception as e:
             flash(f'Migration error: {str(e)}', 'error')
+            logger.error(f"Migration error: {str(e)}")
             return render_template('admin/migrate.html', error=str(e))
     
     return render_template('admin/migrate.html')
