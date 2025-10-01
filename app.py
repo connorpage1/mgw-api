@@ -2397,7 +2397,7 @@ def admin_get_available_parents(file_id):
         available_parents = STLFile.query.filter(
             STLFile.is_partial == False,
             STLFile.id != file_id,
-            STLFile.parent_file_id != file_id
+            db.or_(STLFile.parent_file_id != file_id, STLFile.parent_file_id.is_(None))
         ).order_by(STLFile.original_filename).all()
         
         # Convert to JSON
@@ -2444,7 +2444,7 @@ def debug_available_parents(file_id):
         available_parents = STLFile.query.filter(
             STLFile.is_partial == False,
             STLFile.id != file_id,
-            STLFile.parent_file_id != file_id
+            db.or_(STLFile.parent_file_id != file_id, STLFile.parent_file_id.is_(None))
         ).all()
         
         info['excluding_children'] = len(available_parents)
