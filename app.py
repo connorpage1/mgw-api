@@ -2415,6 +2415,46 @@ def admin_get_available_parents(file_id):
         logger.error(f"Error getting available parents for file {file_id}: {e}")
         return jsonify({'error': 'Failed to get available parents'}), 500
 
+@app.route('/debug-available-parents/<file_id>')
+def debug_available_parents(file_id):
+    """Debug endpoint to check available parents logic"""
+    try:
+        info = {
+            'file_id': file_id,
+            'total_files': 0,
+            'non_partial_files': 0,
+            'excluding_self': 0,
+            'excluding_children': 0,
+            'query_details': {}
+        }
+        
+        # Count total files
+        info['total_files'] = STLFile.query.count()
+        
+        # Count non-partial files
+        info['non_partial_files'] = STLFile.query.filter(STLFile.is_partial == False).count()
+        
+        # Count excluding self
+        info['excluding_self'] = STLFile.query.filter(
+            STLFile.is_partial == False,
+            STLFile.id != file_id
+        ).count()
+        
+        # Final query (excluding children)
+        available_parents = STLFile.query.filter(
+            STLFile.is_partial == False,
+            STLFile.id != file_id,
+            STLFile.parent_file_id != file_id
+        ).all()
+        
+        info['excluding_children'] = len(available_parents)
+        info['sample_parents'] = [{'id': f.id, 'filename': f.original_filename, 'is_partial': f.is_partial} for f in available_parents[:3]]
+        
+        return jsonify(info)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 # ==================== PUBLIC PIXIE API ENDPOINTS ====================
 
 @app.route('/pixie/api/featured', methods=['GET'])
@@ -2699,6 +2739,16 @@ def db_info():
                 required_columns = ['parent_file_id', 'is_partial', 'screenshot_s3_key']
                 existing_column_names = [col[0] for col in info['stl_table_columns']] if info['stl_table_columns'] else [col for col in result.keys()]
                 info['missing_columns'] = [col for col in required_columns if col not in existing_column_names]
+                
+                # Get file counts and sample data
+                result = conn.execute(text("SELECT COUNT(*) FROM stl_files"))
+                info['total_stl_files'] = result.fetchone()[0]
+                
+                result = conn.execute(text("SELECT COUNT(*) FROM stl_files WHERE is_partial = false OR is_partial IS NULL"))
+                info['potential_parent_files'] = result.fetchone()[0]
+                
+                result = conn.execute(text("SELECT id, original_filename, is_partial FROM stl_files LIMIT 5"))
+                info['sample_files'] = [{'id': row[0], 'filename': row[1], 'is_partial': row[2]} for row in result]
                 
             except Exception as direct_error:
                 info['direct_error'] = str(direct_error)
