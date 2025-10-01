@@ -2747,8 +2747,8 @@ def db_info():
                 result = conn.execute(text("SELECT COUNT(*) FROM stl_files WHERE is_partial = false OR is_partial IS NULL"))
                 info['potential_parent_files'] = result.fetchone()[0]
                 
-                result = conn.execute(text("SELECT id, original_filename, is_partial FROM stl_files LIMIT 5"))
-                info['sample_files'] = [{'id': row[0], 'filename': row[1], 'is_partial': row[2]} for row in result]
+                result = conn.execute(text("SELECT id, original_filename, is_partial, parent_file_id FROM stl_files LIMIT 5"))
+                info['sample_files'] = [{'id': row[0], 'filename': row[1], 'is_partial': row[2], 'parent_file_id': row[3]} for row in result]
                 
             except Exception as direct_error:
                 info['direct_error'] = str(direct_error)
