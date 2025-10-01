@@ -2321,9 +2321,11 @@ def admin_set_featured_file(file_id):
     return redirect(url_for('admin_files_list'))
 
 @app.route('/admin/files/stl/<file_id>/relationships', methods=['POST'])
-@admin_required
 def admin_update_stl_relationships(file_id):
-    """Superadmin: Update parent-child relationships for an STL file"""
+    """Update parent-child relationships for an STL file"""
+    if not session.get('admin_logged_in'):
+        return jsonify({'error': 'Authentication required'}), 401
+    
     try:
         stl_file = STLFile.query.get_or_404(file_id)
         
@@ -2383,9 +2385,11 @@ def admin_update_stl_relationships(file_id):
         return jsonify({'error': 'Failed to update relationships'}), 500
 
 @app.route('/admin/files/stl/available-parents/<file_id>')
-@admin_required  
 def admin_get_available_parents(file_id):
     """Get available parent files for a given STL file (excludes self and children)"""
+    if not session.get('admin_logged_in'):
+        return jsonify({'error': 'Authentication required'}), 401
+    
     try:
         current_file = STLFile.query.get_or_404(file_id)
         
