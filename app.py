@@ -2678,10 +2678,19 @@ def db_info():
             result = conn.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))
             info['tables'] = [row[0] for row in result]
             
-            # If stl_files table exists, get its columns
-            if 'stl_files' in info['tables']:
-                result = conn.execute(text("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'stl_files'"))
+            # Get stl_files table columns (try different approaches)
+            try:
+                result = conn.execute(text("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'stl_files' AND table_schema = 'public'"))
                 info['stl_table_columns'] = [(row[0], row[1]) for row in result]
+            except Exception as col_error:
+                info['column_error'] = str(col_error)
+                
+            # Also try direct query to stl_files table
+            try:
+                result = conn.execute(text("SELECT * FROM stl_files LIMIT 0"))
+                info['stl_direct_columns'] = [col for col in result.keys()]
+            except Exception as direct_error:
+                info['direct_error'] = str(direct_error)
         
         return jsonify(info)
         
