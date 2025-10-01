@@ -344,7 +344,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     function loadAvailableParents() {
-        fetch(`/admin/files/stl/available-parents/${fileId}`)
+        fetch(`/admin/files/stl/available-parents/${fileId}`, {
+            credentials: 'same-origin'
+        })
             .then(response => response.json())
             .then(data => {
                 if (data.parents) {
@@ -390,7 +392,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
         fetch(`/admin/files/stl/${fileId}/relationships`, {
             method: 'POST',
-            body: formData
+            body: formData,
+            credentials: 'same-origin'
         })
         .then(response => response.json())
         .then(data => {
