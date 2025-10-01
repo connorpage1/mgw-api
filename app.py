@@ -2660,6 +2660,34 @@ def admin_account():
             message = 'Account updated successfully.'
     return render_template('admin/account.html', user=user, message=message, error=error)
 
+# Database diagnostic endpoint
+@app.route('/admin/db-info')
+def db_info():
+    """Show database connection and table info for debugging"""
+    try:
+        info = {
+            'database_url': app.config['SQLALCHEMY_DATABASE_URI'][:50] + '...',
+            'tables': [],
+            'stl_table_columns': [],
+            'error': None
+        }
+        
+        # Check database connection
+        with db.engine.connect() as conn:
+            # Get all tables
+            result = conn.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))
+            info['tables'] = [row[0] for row in result]
+            
+            # If stl_file table exists, get its columns
+            if 'stl_file' in info['tables']:
+                result = conn.execute(text("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'stl_file'"))
+                info['stl_table_columns'] = [(row[0], row[1]) for row in result]
+        
+        return jsonify(info)
+        
+    except Exception as e:
+        return jsonify({'error': str(e), 'type': type(e).__name__}), 500
+
 # Database migration endpoint
 @app.route('/admin/migrate-database', methods=['GET', 'POST'])
 @jwt_required(optional=True)
