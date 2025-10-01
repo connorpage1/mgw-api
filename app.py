@@ -2728,6 +2728,32 @@ def init_production_app():
             # Create tables if they don't exist
             db.create_all()
             print("✅ Database tables initialized")
+            
+            # Try to add missing columns to existing stl_file table
+            try:
+                with db.engine.connect() as conn:
+                    # Check if we can select from stl_file to see current schema
+                    result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'stl_file'"))
+                    existing_columns = [row[0] for row in result]
+                    
+                    if 'parent_file_id' not in existing_columns:
+                        conn.execute(text("ALTER TABLE stl_file ADD COLUMN parent_file_id INTEGER"))
+                        conn.commit()
+                        print("✅ Added parent_file_id column")
+                    
+                    if 'is_partial' not in existing_columns:
+                        conn.execute(text("ALTER TABLE stl_file ADD COLUMN is_partial BOOLEAN DEFAULT FALSE"))
+                        conn.commit()
+                        print("✅ Added is_partial column")
+                    
+                    if 'screenshot_s3_key' not in existing_columns:
+                        conn.execute(text("ALTER TABLE stl_file ADD COLUMN screenshot_s3_key VARCHAR(500)"))
+                        conn.commit()
+                        print("✅ Added screenshot_s3_key column")
+                        
+            except Exception as schema_error:
+                print(f"⚠️ Schema update warning: {schema_error}")
+                
         except Exception as e:
             print(f"⚠️ Database initialization warning: {e}")
 
