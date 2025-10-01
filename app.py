@@ -2669,6 +2669,7 @@ def db_info():
             'database_url': app.config['SQLALCHEMY_DATABASE_URI'][:50] + '...',
             'tables': [],
             'stl_table_columns': [],
+            'missing_columns': [],
             'error': None
         }
         
@@ -2689,6 +2690,12 @@ def db_info():
             try:
                 result = conn.execute(text("SELECT * FROM stl_files LIMIT 0"))
                 info['stl_direct_columns'] = [col for col in result.keys()]
+                
+                # Check for missing columns specifically
+                required_columns = ['parent_file_id', 'is_partial', 'screenshot_s3_key']
+                existing_column_names = [col[0] for col in info['stl_table_columns']] if info['stl_table_columns'] else [col for col in result.keys()]
+                info['missing_columns'] = [col for col in required_columns if col not in existing_column_names]
+                
             except Exception as direct_error:
                 info['direct_error'] = str(direct_error)
         
@@ -2746,7 +2753,7 @@ def init_production_app():
                     existing_columns = [row[0] for row in result]
                     
                     if 'parent_file_id' not in existing_columns:
-                        conn.execute(text("ALTER TABLE stl_files ADD COLUMN parent_file_id INTEGER"))
+                        conn.execute(text("ALTER TABLE stl_files ADD COLUMN parent_file_id VARCHAR(36)"))
                         conn.commit()
                         print("✅ Added parent_file_id column")
                     
