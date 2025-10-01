@@ -131,6 +131,36 @@
                 </div>
             </div>
         </div>
+
+        <!-- Edit Relationships Card -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">Edit Relationships</h2>
+            <form id="relationship-form" class="space-y-4">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                
+                <div>
+                    <label class="flex items-center mb-2">
+                        <input type="checkbox" name="is_partial" id="is_partial_checkbox" 
+                               {{ 'checked' if stl_file.is_partial else '' }} class="mr-2">
+                        <span class="text-sm font-medium text-gray-700">This is a partial/split file</span>
+                    </label>
+                </div>
+                
+                <div id="parent-file-section">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Parent File</label>
+                    <select name="parent_file_id" id="parent_file_select" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">None - This is a full file</option>
+                        <!-- Options will be populated by JavaScript -->
+                    </select>
+                    <p class="text-xs text-gray-500 mt-1">Select the full file that this partial file was cut from</p>
+                </div>
+                
+                <button type="submit" class="w-full bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-save mr-2"></i>Update Relationships
+                </button>
+            </form>
+        </div>
     </div>
 
     <!-- File Relationships -->
@@ -279,5 +309,137 @@ function copyToClipboard(text) {
         }, 2000);
     });
 }
+
+// Relationship editing functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const fileId = '{{ stl_file.id }}';
+    const currentParentId = '{{ stl_file.parent_file_id or "" }}';
+    const isPartialCheckbox = document.getElementById('is_partial_checkbox');
+    const parentFileSelect = document.getElementById('parent_file_select');
+    const parentFileSection = document.getElementById('parent-file-section');
+    const relationshipForm = document.getElementById('relationship-form');
+
+    // Load available parent files
+    loadAvailableParents();
+
+    // Handle partial checkbox change
+    isPartialCheckbox.addEventListener('change', function() {
+        if (this.checked) {
+            parentFileSection.style.display = 'block';
+        } else {
+            parentFileSection.style.display = 'none';
+            parentFileSelect.value = '';
+        }
+    });
+
+    // Initialize UI based on current state
+    if (!isPartialCheckbox.checked) {
+        parentFileSection.style.display = 'none';
+    }
+
+    // Handle form submission
+    relationshipForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        updateRelationships();
+    });
+
+    function loadAvailableParents() {
+        fetch(`/admin/files/stl/available-parents/${fileId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.parents) {
+                    // Clear existing options (except the first one)
+                    while (parentFileSelect.children.length > 1) {
+                        parentFileSelect.removeChild(parentFileSelect.lastChild);
+                    }
+
+                    // Add parent options
+                    data.parents.forEach(parent => {
+                        const option = document.createElement('option');
+                        option.value = parent.id;
+                        option.textContent = `${parent.filename} (${parent.upload_date})`;
+                        
+                        // Select current parent if it exists
+                        if (parent.id === currentParentId) {
+                            option.selected = true;
+                        }
+                        
+                        parentFileSelect.appendChild(option);
+                    });
+                } else {
+                    console.error('Failed to load available parents:', data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error loading available parents:', error);
+                showMessage('Failed to load available parent files', 'error');
+            });
+    }
+
+    function updateRelationships() {
+        const formData = new FormData();
+        formData.append('csrf_token', document.querySelector('input[name="csrf_token"]').value);
+        formData.append('is_partial', isPartialCheckbox.checked);
+        formData.append('parent_file_id', isPartialCheckbox.checked ? parentFileSelect.value : '');
+
+        // Show loading state
+        const submitButton = relationshipForm.querySelector('button[type="submit"]');
+        const originalText = submitButton.innerHTML;
+        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Updating...';
+        submitButton.disabled = true;
+
+        fetch(`/admin/files/stl/${fileId}/relationships`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showMessage(data.message, 'success');
+                
+                // Update the page to reflect changes
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            } else {
+                showMessage(data.error || 'Failed to update relationships', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error updating relationships:', error);
+            showMessage('Failed to update relationships', 'error');
+        })
+        .finally(() => {
+            // Restore button state
+            submitButton.innerHTML = originalText;
+            submitButton.disabled = false;
+        });
+    }
+
+    function showMessage(message, type) {
+        // Create message element
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg ${
+            type === 'success' ? 'bg-green-100 text-green-800 border border-green-200' : 
+            'bg-red-100 text-red-800 border border-red-200'
+        }`;
+        messageDiv.innerHTML = `
+            <div class="flex items-center">
+                <i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle'} mr-2"></i>
+                <span>${message}</span>
+            </div>
+        `;
+
+        // Add to page
+        document.body.appendChild(messageDiv);
+
+        // Remove after 5 seconds
+        setTimeout(() => {
+            if (messageDiv.parentNode) {
+                messageDiv.parentNode.removeChild(messageDiv);
+            }
+        }, 5000);
+    }
+});
 </script>
 {% endblock %}

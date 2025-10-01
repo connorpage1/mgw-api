@@ -2273,6 +2273,97 @@ def admin_set_featured_file(file_id):
     flash(f'STL file "{new_featured.original_filename}" is now featured for tourists', 'success')
     return redirect(url_for('admin_files_list'))
 
+@app.route('/admin/files/stl/<file_id>/relationships', methods=['POST'])
+@superadmin_required
+def admin_update_stl_relationships(file_id):
+    """Superadmin: Update parent-child relationships for an STL file"""
+    try:
+        stl_file = STLFile.query.get_or_404(file_id)
+        
+        # Get form data
+        is_partial = request.form.get('is_partial') == 'true'
+        parent_file_id = request.form.get('parent_file_id')
+        
+        # Validate parent file if provided
+        parent_file = None
+        if parent_file_id:
+            parent_file = STLFile.query.get(parent_file_id)
+            if not parent_file:
+                return jsonify({'error': 'Parent file not found'}), 400
+            
+            # Prevent circular relationships
+            if parent_file_id == file_id:
+                return jsonify({'error': 'A file cannot be its own parent'}), 400
+            
+            # Check if proposed parent is actually a child of this file
+            if stl_file.id == parent_file.parent_file_id:
+                return jsonify({'error': 'Cannot create circular relationship: proposed parent is a child of this file'}), 400
+            
+            # Check deeper circular relationships
+            def check_circular_relationship(potential_parent, target_file_id, depth=0):
+                if depth > 10:  # Prevent infinite recursion
+                    return False
+                if potential_parent.parent_file_id == target_file_id:
+                    return True
+                if potential_parent.parent_file and potential_parent.parent_file_id:
+                    return check_circular_relationship(potential_parent.parent_file, target_file_id, depth + 1)
+                return False
+            
+            if check_circular_relationship(parent_file, file_id):
+                return jsonify({'error': 'Cannot create circular relationship in the file hierarchy'}), 400
+        
+        # Update the file
+        stl_file.is_partial = is_partial
+        stl_file.parent_file_id = parent_file_id if parent_file_id else None
+        
+        db.session.commit()
+        
+        # Return updated file data
+        return jsonify({
+            'success': True,
+            'message': 'Relationships updated successfully',
+            'file': {
+                'id': stl_file.id,
+                'is_partial': stl_file.is_partial,
+                'parent_file_id': stl_file.parent_file_id,
+                'parent_file_name': stl_file.parent_file.original_filename if stl_file.parent_file else None
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error updating relationships for file {file_id}: {e}")
+        return jsonify({'error': 'Failed to update relationships'}), 500
+
+@app.route('/admin/files/stl/available-parents/<file_id>')
+@superadmin_required
+def admin_get_available_parents(file_id):
+    """Get available parent files for a given STL file (excludes self and children)"""
+    try:
+        current_file = STLFile.query.get_or_404(file_id)
+        
+        # Get all non-partial files except current file and its children
+        available_parents = STLFile.query.filter(
+            STLFile.is_partial == False,
+            STLFile.id != file_id,
+            STLFile.parent_file_id != file_id
+        ).order_by(STLFile.original_filename).all()
+        
+        # Convert to JSON
+        parents = []
+        for file in available_parents:
+            parents.append({
+                'id': file.id,
+                'filename': file.original_filename,
+                'upload_date': file.upload_timestamp.strftime('%Y-%m-%d')
+            })
+        
+        return jsonify({'parents': parents})
+        
+    except Exception as e:
+        logger.error(f"Error getting available parents for file {file_id}: {e}")
+        return jsonify({'error': 'Failed to get available parents'}), 500
+
 # ==================== PUBLIC PIXIE API ENDPOINTS ====================
 
 @app.route('/pixie/api/featured', methods=['GET'])
