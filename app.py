@@ -2678,9 +2678,9 @@ def db_info():
             result = conn.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))
             info['tables'] = [row[0] for row in result]
             
-            # If stl_file table exists, get its columns
-            if 'stl_file' in info['tables']:
-                result = conn.execute(text("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'stl_file'"))
+            # If stl_files table exists, get its columns
+            if 'stl_files' in info['tables']:
+                result = conn.execute(text("SELECT column_name, data_type FROM information_schema.columns WHERE table_name = 'stl_files'"))
                 info['stl_table_columns'] = [(row[0], row[1]) for row in result]
         
         return jsonify(info)
@@ -2732,22 +2732,22 @@ def init_production_app():
             # Try to add missing columns to existing stl_file table
             try:
                 with db.engine.connect() as conn:
-                    # Check if we can select from stl_file to see current schema
-                    result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'stl_file'"))
+                    # Check if we can select from stl_files to see current schema
+                    result = conn.execute(text("SELECT column_name FROM information_schema.columns WHERE table_name = 'stl_files'"))
                     existing_columns = [row[0] for row in result]
                     
                     if 'parent_file_id' not in existing_columns:
-                        conn.execute(text("ALTER TABLE stl_file ADD COLUMN parent_file_id INTEGER"))
+                        conn.execute(text("ALTER TABLE stl_files ADD COLUMN parent_file_id INTEGER"))
                         conn.commit()
                         print("✅ Added parent_file_id column")
                     
                     if 'is_partial' not in existing_columns:
-                        conn.execute(text("ALTER TABLE stl_file ADD COLUMN is_partial BOOLEAN DEFAULT FALSE"))
+                        conn.execute(text("ALTER TABLE stl_files ADD COLUMN is_partial BOOLEAN DEFAULT FALSE"))
                         conn.commit()
                         print("✅ Added is_partial column")
                     
                     if 'screenshot_s3_key' not in existing_columns:
-                        conn.execute(text("ALTER TABLE stl_file ADD COLUMN screenshot_s3_key VARCHAR(500)"))
+                        conn.execute(text("ALTER TABLE stl_files ADD COLUMN screenshot_s3_key VARCHAR(500)"))
                         conn.commit()
                         print("✅ Added screenshot_s3_key column")
                         
