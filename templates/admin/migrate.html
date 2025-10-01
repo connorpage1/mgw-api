@@ -1,0 +1,84 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Database Migration{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="max-w-2xl mx-auto">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h1 class="text-2xl font-bold text-gray-800 mb-6">
+                <i class="fas fa-database mr-3 text-blue-600"></i>
+                Database Migration
+            </h1>
+            
+            <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-exclamation-triangle text-yellow-400"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-yellow-700">
+                            <strong>Warning:</strong> This will update the database schema to add new columns for parent-child relationships and screenshot storage. This operation is safe and will not delete existing data.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold text-gray-700 mb-3">Migration will add:</h3>
+                <ul class="space-y-2 text-sm text-gray-600">
+                    <li class="flex items-center">
+                        <i class="fas fa-plus-circle text-green-500 mr-2"></i>
+                        <code>parent_file_id</code> column for file relationships
+                    </li>
+                    <li class="flex items-center">
+                        <i class="fas fa-plus-circle text-green-500 mr-2"></i>
+                        <code>is_partial</code> column to mark partial files
+                    </li>
+                    <li class="flex items-center">
+                        <i class="fas fa-plus-circle text-green-500 mr-2"></i>
+                        <code>screenshot_s3_key</code> column for preview images
+                    </li>
+                    <li class="flex items-center">
+                        <i class="fas fa-plus-circle text-green-500 mr-2"></i>
+                        Foreign key constraint for parent relationships
+                    </li>
+                </ul>
+            </div>
+
+            {% if error %}
+            <div class="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-exclamation-circle text-red-400"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm text-red-700">
+                            <strong>Migration Error:</strong> {{ error }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <form method="POST" class="space-y-4">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                
+                <div class="flex space-x-4">
+                    <button type="submit" 
+                            class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200 flex items-center justify-center">
+                        <i class="fas fa-play mr-2"></i>
+                        Run Migration
+                    </button>
+                    
+                    <a href="{{ url_for('admin_dashboard') }}" 
+                       class="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-semibold py-3 px-6 rounded-lg transition duration-200 flex items-center justify-center text-center">
+                        <i class="fas fa-arrow-left mr-2"></i>
+                        Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

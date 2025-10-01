@@ -288,6 +288,182 @@
         hideConfirmModal();
       }
     });
+
+    // =============================================
+    // CSRF Token Auto-Refresh System
+    // =============================================
+    
+    let csrfRefreshTimer = null;
+    let lastActivity = Date.now();
+    let isActive = true;
+    
+    // Track user activity
+    const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    activityEvents.forEach(event => {
+        document.addEventListener(event, () => {
+            lastActivity = Date.now();
+        }, { passive: true });
+    });
+    
+    // Track page visibility to pause refresh when tab is inactive
+    document.addEventListener('visibilitychange', () => {
+        isActive = !document.hidden;
+        if (isActive) {
+            // Resume refresh when tab becomes active
+            startCSRFRefresh();
+        } else {
+            // Pause refresh when tab becomes inactive
+            if (csrfRefreshTimer) {
+                clearInterval(csrfRefreshTimer);
+                csrfRefreshTimer = null;
+            }
+        }
+    });
+    
+    // Function to refresh CSRF token
+    async function refreshCSRFToken() {
+        try {
+            // Only refresh if user has been active in last 10 minutes
+            const inactiveTime = Date.now() - lastActivity;
+            if (inactiveTime > 10 * 60 * 1000) {
+                console.log('User inactive, skipping CSRF refresh');
+                return;
+            }
+            
+            const response = await fetch('/admin/csrf-token', {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.success && data.csrf_token) {
+                    // Update all CSRF token inputs on the page
+                    const csrfInputs = document.querySelectorAll('input[name="csrf_token"]');
+                    csrfInputs.forEach(input => {
+                        input.value = data.csrf_token;
+                    });
+                    
+                    // Update global CSRF token for JavaScript use
+                    window.csrfToken = data.csrf_token;
+                    
+                    console.log('CSRF token refreshed successfully');
+                } else {
+                    console.warn('Failed to refresh CSRF token:', data.error);
+                }
+            } else {
+                console.warn('CSRF refresh request failed:', response.status);
+            }
+        } catch (error) {
+            console.warn('Error refreshing CSRF token:', error);
+        }
+    }
+    
+    // Function to start CSRF refresh timer
+    function startCSRFRefresh() {
+        // Clear existing timer
+        if (csrfRefreshTimer) {
+            clearInterval(csrfRefreshTimer);
+        }
+        
+        // Refresh token every 45 minutes (45 * 60 * 1000 = 2,700,000 ms)
+        csrfRefreshTimer = setInterval(() => {
+            if (isActive) {
+                refreshCSRFToken();
+            }
+        }, 45 * 60 * 1000);
+    }
+    
+    // Enhanced form submission with CSRF error handling
+    window.submitFormWithCSRFRetry = async function(form, maxRetries = 1) {
+        let retries = 0;
+        
+        while (retries <= maxRetries) {
+            try {
+                const formData = new FormData(form);
+                const response = await fetch(form.action, {
+                    method: form.method || 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    // Success - handle redirect or response
+                    if (response.redirected) {
+                        window.location.href = response.url;
+                    } else {
+                        return response;
+                    }
+                    return;
+                } else if (response.status === 400) {
+                    // Check if it's a CSRF error
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        const errorData = await response.json();
+                        if (errorData.csrf_error && retries < maxRetries) {
+                            console.log('CSRF error detected, refreshing token and retrying...');
+                            await refreshCSRFToken();
+                            retries++;
+                            continue;
+                        }
+                    }
+                }
+                
+                // If we get here, it's not a recoverable CSRF error
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                
+            } catch (error) {
+                if (retries < maxRetries) {
+                    console.log('Form submission failed, retrying...', error);
+                    retries++;
+                } else {
+                    throw error;
+                }
+            }
+        }
+    };
+    
+    // Function to show CSRF error message
+    window.showCSRFError = function(message) {
+        message = message || 'Security token expired. The page will refresh automatically.';
+        
+        // Create or update notification
+        let notification = document.getElementById('csrf-notification');
+        if (!notification) {
+            notification = document.createElement('div');
+            notification.id = 'csrf-notification';
+            notification.className = 'fixed top-4 right-4 z-50 bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-3 rounded shadow-lg';
+            document.body.appendChild(notification);
+        }
+        
+        notification.innerHTML = `
+            <div class="flex items-center">
+                <i class="fas fa-exclamation-triangle mr-2"></i>
+                <span>${message}</span>
+                <button onclick="refreshCSRFToken(); this.parentElement.parentElement.remove();" class="ml-3 text-yellow-600 hover:text-yellow-800">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+        `;
+        
+        // Auto-remove after 10 seconds
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 10000);
+    };
+    
+    // Start CSRF refresh on page load
+    startCSRFRefresh();
+    
+    // Store initial CSRF token for JavaScript use
+    const initialCSRFInput = document.querySelector('input[name="csrf_token"]');
+    if (initialCSRFInput) {
+        window.csrfToken = initialCSRFInput.value;
+    }
+    
     </script>
 </body>
 </html>

@@ -2660,6 +2660,59 @@ def admin_account():
             message = 'Account updated successfully.'
     return render_template('admin/account.html', user=user, message=message, error=error)
 
+# Database migration endpoint
+@app.route('/admin/migrate-database', methods=['GET', 'POST'])
+@jwt_required(optional=True)
+def migrate_database():
+    """Migrate database schema for new columns"""
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('login'))
+    
+    if request.method == 'POST':
+        try:
+            # Add missing columns to STLFile table
+            with db.engine.connect() as conn:
+                # Check if columns exist and add them if they don't
+                try:
+                    conn.execute(text("ALTER TABLE stl_file ADD COLUMN parent_file_id INTEGER"))
+                    print("✅ Added parent_file_id column")
+                except Exception as e:
+                    if "already exists" not in str(e).lower():
+                        print(f"⚠️ parent_file_id column issue: {e}")
+                
+                try:
+                    conn.execute(text("ALTER TABLE stl_file ADD COLUMN is_partial BOOLEAN DEFAULT FALSE"))
+                    print("✅ Added is_partial column")
+                except Exception as e:
+                    if "already exists" not in str(e).lower():
+                        print(f"⚠️ is_partial column issue: {e}")
+                
+                try:
+                    conn.execute(text("ALTER TABLE stl_file ADD COLUMN screenshot_s3_key VARCHAR(500)"))
+                    print("✅ Added screenshot_s3_key column")
+                except Exception as e:
+                    if "already exists" not in str(e).lower():
+                        print(f"⚠️ screenshot_s3_key column issue: {e}")
+                
+                # Add foreign key constraint
+                try:
+                    conn.execute(text("ALTER TABLE stl_file ADD CONSTRAINT fk_parent_file FOREIGN KEY (parent_file_id) REFERENCES stl_file(id)"))
+                    print("✅ Added parent_file foreign key constraint")
+                except Exception as e:
+                    if "already exists" not in str(e).lower():
+                        print(f"⚠️ Foreign key constraint issue: {e}")
+                
+                conn.commit()
+            
+            flash('Database migration completed successfully!', 'success')
+            return redirect(url_for('admin_dashboard'))
+            
+        except Exception as e:
+            flash(f'Migration error: {str(e)}', 'error')
+            return render_template('admin/migrate.html', error=str(e))
+    
+    return render_template('admin/migrate.html')
+
 # Production initialization
 def init_production_app():
     """Initialize app for production deployment"""
