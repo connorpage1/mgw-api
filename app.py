@@ -2321,7 +2321,7 @@ def admin_set_featured_file(file_id):
     return redirect(url_for('admin_files_list'))
 
 @app.route('/admin/files/stl/<file_id>/relationships', methods=['POST'])
-@superadmin_required
+@admin_required
 def admin_update_stl_relationships(file_id):
     """Superadmin: Update parent-child relationships for an STL file"""
     try:
@@ -2383,7 +2383,7 @@ def admin_update_stl_relationships(file_id):
         return jsonify({'error': 'Failed to update relationships'}), 500
 
 @app.route('/admin/files/stl/available-parents/<file_id>')
-@superadmin_required
+@admin_required  
 def admin_get_available_parents(file_id):
     """Get available parent files for a given STL file (excludes self and children)"""
     try:
