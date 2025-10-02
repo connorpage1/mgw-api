@@ -48,14 +48,18 @@ if database_url.startswith('postgres://'):
     database_url = database_url.replace('postgres://', 'postgresql://', 1)
 
 # Add SSL parameters for Railway PostgreSQL
-if database_url.startswith('postgresql://') and 'railway.app' in database_url:
-    # Railway PostgreSQL requires SSL
+if database_url.startswith('postgresql://'):
+    # Railway managed PostgreSQL - try disabling SSL verification
     if '?' not in database_url:
-        database_url += '?sslmode=require'
+        database_url += '?sslmode=disable'
     elif 'sslmode=' not in database_url:
-        database_url += '&sslmode=require'
+        database_url += '&sslmode=disable'
 
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+
+# Debug database configuration
+print(f"🗄️  Database URL (first 50 chars): {database_url[:50]}...")
+print(f"🔗 SSL mode in URL: {'sslmode=' in database_url}")
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
