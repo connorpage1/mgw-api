@@ -963,6 +963,59 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# ==================== CERTIFICATE VALIDATION API ====================
+
+@app.route('/pixie/api/certificate/validate', methods=['POST'])
+@api_key_required
+def validate_certificate():
+    """Validate client certificate for Pixie Viewer authentication"""
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'valid': False,
+                'status': 'invalid_request',
+                'message': 'No certificate data provided'
+            }), 400
+        
+        common_name = data.get('commonName')
+        fingerprint = data.get('fingerprint')
+        organization = data.get('organization')
+        
+        if not common_name:
+            return jsonify({
+                'valid': False,
+                'status': 'missing_common_name',
+                'message': 'Certificate common name is required'
+            }), 400
+        
+        # For now, accept any certificate with proper Mardi Gras World organization
+        if organization and 'Mardi Gras World' in organization:
+            return jsonify({
+                'valid': True,
+                'status': 'valid',
+                'message': 'Certificate is valid',
+                'certificate': {
+                    'commonName': common_name,
+                    'organization': organization,
+                    'fingerprint': fingerprint
+                }
+            }), 200
+        else:
+            return jsonify({
+                'valid': False,
+                'status': 'invalid_organization',
+                'message': 'Certificate not from authorized organization'
+            }), 403
+            
+    except Exception as e:
+        return jsonify({
+            'valid': False,
+            'status': 'validation_error',
+            'message': f'Certificate validation failed: {str(e)}'
+        }), 500
+
 # ==================== ADMIN DASHBOARD FOR ALL APPS ====================
 
 @app.route('/admin')
