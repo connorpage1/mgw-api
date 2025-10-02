@@ -1,0 +1,29 @@
+📱 INSTALLATION INSTRUCTIONS: vip-tour-ipad
+Location: VIP Tour Room
+
+iPad Installation:
+1. Email the vip-tour-ipad.p12 file to yourself
+2. Open Mail on iPad and tap the attachment
+3. Tap "Install Profile"
+4. Enter password: display123
+5. Tap "Install" and enter iPad passcode
+6. Tap "Done"
+
+Browser Installation (Desktop):
+1. Double-click vip-tour-ipad.p12
+2. Enter password: display123
+3. Follow browser prompts to install
+
+Testing Access:
+1. Open browser and go to: https://pixie.mardigrasworld.com
+2. When prompted, select certificate: "vip-tour-ipad - Mardi Gras World Display"
+3. You should now have access to Pixie viewer!
+
+Certificate Details:
+- Display: vip-tour-ipad
+- Location: VIP Tour Room
+- Valid for: 5 years (1825 days)
+- Password: display123
+- Type: Display Certificate
+
+Created: Thu Oct  2 03:29:23 CDT 2025
