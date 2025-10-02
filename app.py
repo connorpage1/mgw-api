@@ -3904,6 +3904,41 @@ def init_production_app():
         except Exception as e:
             print(f"⚠️ Database initialization warning: {e}")
 
+# Database initialization endpoint for Railway
+@app.route('/init-database', methods=['GET', 'POST'])
+def manual_init_database():
+    """Manual database initialization endpoint for Railway deployment"""
+    try:
+        # Import the init function from our script
+        from init_production_db import init_database
+        
+        # Run initialization
+        output = []
+        
+        # Capture print output
+        import io
+        import contextlib
+        
+        f = io.StringIO()
+        with contextlib.redirect_stdout(f):
+            init_database()
+        
+        output = f.getvalue()
+        
+        return {
+            'success': True,
+            'message': 'Database initialized successfully!',
+            'output': output,
+            'status': 'Database tables and users created'
+        }, 200
+        
+    except Exception as e:
+        return {
+            'success': False,
+            'error': str(e),
+            'message': 'Database initialization failed'
+        }, 500
+
 # Initialize database tables on startup
 init_production_app()
 
