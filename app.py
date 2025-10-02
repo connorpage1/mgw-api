@@ -46,6 +46,15 @@ database_url = os.environ.get('DATABASE_URL', 'sqlite:///instance/mardi_gras_dev
 # Fix for Railway PostgreSQL URL format (postgresql:// vs postgres://)
 if database_url.startswith('postgres://'):
     database_url = database_url.replace('postgres://', 'postgresql://', 1)
+
+# Add SSL parameters for Railway PostgreSQL
+if database_url.startswith('postgresql://') and 'railway.app' in database_url:
+    # Railway PostgreSQL requires SSL
+    if '?' not in database_url:
+        database_url += '?sslmode=require'
+    elif 'sslmode=' not in database_url:
+        database_url += '&sslmode=require'
+
 app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
