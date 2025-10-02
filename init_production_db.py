@@ -96,6 +96,35 @@ def init_database():
             else:
                 print("✓ Admin user already exists")
             
+            # Create Connor's user account
+            connor_user = User.query.filter_by(email='cpage@kernstudios.com').first()
+            if not connor_user:
+                print("👤 Creating Connor's user account...")
+                
+                # Get superadmin role
+                superadmin_role = Role.query.filter_by(name='superadmin').first()
+                
+                connor_user = User(
+                    email='cpage@kernstudios.com',
+                    first_name='Connor',
+                    last_name='Page',
+                    password=secure_hasher.hash_password('temp123'),  # Change this password
+                    active=True
+                )
+                
+                if superadmin_role:
+                    connor_user.roles = [superadmin_role]
+                
+                db.session.add(connor_user)
+                db.session.commit()
+                
+                print(f"✅ Connor's user account created!")
+                print(f"📧 Email: cpage@kernstudios.com")
+                print(f"🔑 Temporary Password: temp123")
+                print("⚠️  IMPORTANT: Change this password after first login!")
+            else:
+                print("✓ Connor's user account already exists")
+            
             # Create/update pixie viewer service user with API key
             print("\n🤖 Setting up Pixie Viewer service user...")
             
