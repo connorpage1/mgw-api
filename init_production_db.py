@@ -96,6 +96,45 @@ def init_database():
             else:
                 print("✓ Admin user already exists")
             
+            # Create/update pixie viewer service user with API key
+            print("\n🤖 Setting up Pixie Viewer service user...")
+            
+            pixie_user = User.query.filter_by(email='pixie@mardigras.com').first()
+            if not pixie_user:
+                # Create dedicated service user for pixie viewer
+                pixie_api_key = secrets.token_urlsafe(32)
+                
+                pixie_user = User(
+                    email='pixie@mardigras.com',
+                    first_name='Pixie',
+                    last_name='Viewer Service',
+                    password=secure_hasher.hash_password(secrets.token_urlsafe(32)),  # Random password
+                    active=True,
+                    api_key=pixie_api_key
+                )
+                
+                # Assign viewer role (or create if it doesn't exist)
+                viewer_role = Role.query.filter_by(name='viewer').first()
+                if viewer_role:
+                    pixie_user.roles = [viewer_role]
+                
+                db.session.add(pixie_user)
+                db.session.commit()
+                
+                print(f"✅ Pixie Viewer service user created!")
+                print(f"🔑 Pixie Viewer API Key: {pixie_api_key}")
+                print("⚠️  IMPORTANT: Add this API key to your pixie_v2 environment variables!")
+            else:
+                # Update existing user with new API key if needed
+                if not pixie_user.api_key:
+                    pixie_user.api_key = secrets.token_urlsafe(32)
+                    db.session.commit()
+                    print(f"✅ Updated existing Pixie Viewer user with API key!")
+                    print(f"🔑 Pixie Viewer API Key: {pixie_user.api_key}")
+                else:
+                    print(f"✓ Pixie Viewer service user already exists")
+                    print(f"🔑 Current API Key: {pixie_user.api_key}")
+            
             print("\n🎉 Database initialization completed successfully!")
             print("\n📝 Next steps:")
             print("1. Log in with the admin credentials above")

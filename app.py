@@ -109,7 +109,7 @@ def handle_bad_request(e):
             }), 400
         else:
             flash('Security token expired. Please refresh the page and try again.', 'error')
-            return redirect(request.referrer or url_for('admin_dashboard'))
+            return redirect(request.referrer or url_for('admin_main_dashboard'))
     
     # Handle other 400 errors
     return f"Bad Request: {error_description}", 400
@@ -141,6 +141,17 @@ def inject_csrf_token():
     """Make CSRF token available in all templates"""
     from flask_wtf.csrf import generate_csrf
     return dict(csrf_token=generate_csrf)
+
+# Add strftime filter for templates
+@app.template_filter('strftime')
+def strftime_filter(dt, format='%Y-%m-%d'):
+    """Format datetime for templates"""
+    if dt is None:
+        return ''
+    try:
+        return dt.strftime(format)
+    except (AttributeError, ValueError):
+        return str(dt)
 
 # Security Headers
 @app.after_request
@@ -499,6 +510,65 @@ class FileUploadLog(db.Model):
     def __repr__(self):
         return f'<FileUploadLog {self.filename}>'
 
+class Certificate(db.Model):
+    __tablename__ = 'certificates'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    common_name = db.Column(db.String(255), nullable=False, unique=True)
+    certificate_type = db.Column(db.String(50), nullable=False)  # 'server', 'ca', 'client'
+    purpose = db.Column(db.String(100))  # 'display', 'sales', 'server', 'ca'
+    
+    # Certificate content stored as text
+    certificate_data = db.Column(db.Text, nullable=False)  # PEM format certificate
+    private_key_data = db.Column(db.Text)  # PEM format private key (optional for CA certs)
+    
+    # Certificate metadata
+    fingerprint = db.Column(db.String(128), nullable=False, unique=True)
+    issuer = db.Column(db.String(500))
+    subject = db.Column(db.String(500))
+    
+    # Validity dates
+    valid_from = db.Column(db.DateTime, nullable=False)
+    valid_until = db.Column(db.DateTime, nullable=False)
+    
+    # Management fields
+    is_active = db.Column(db.Boolean, default=True)
+    is_revoked = db.Column(db.Boolean, default=False)
+    revoked_at = db.Column(db.DateTime)
+    revoked_reason = db.Column(db.String(255))
+    
+    # Tracking
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
+    creator = db.relationship('User', backref='created_certificates')
+    
+    def __repr__(self):
+        return f'<Certificate {self.common_name} ({self.certificate_type})>'
+    
+    def is_expired(self):
+        return datetime.utcnow() > self.valid_until
+    
+    def expires_soon(self, days=30):
+        return (self.valid_until - datetime.utcnow()).days <= days
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'common_name': self.common_name,
+            'certificate_type': self.certificate_type,
+            'purpose': self.purpose,
+            'fingerprint': self.fingerprint,
+            'issuer': self.issuer,
+            'subject': self.subject,
+            'valid_from': self.valid_from.isoformat() if self.valid_from else None,
+            'valid_until': self.valid_until.isoformat() if self.valid_until else None,
+            'is_active': self.is_active,
+            'is_revoked': self.is_revoked,
+            'is_expired': self.is_expired(),
+            'expires_soon': self.expires_soon(),
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
 # ==================== PASSWORD HASHER ====================
 
 class SecurePasswordHasher:
@@ -542,6 +612,157 @@ def superadmin_required(f):
         if not user.active or not user.has_role('superadmin'):
             abort(403)
         return f(*args, **kwargs)
+    return decorated_function
+
+def api_key_required(f):
+    """Decorator for API key authenticated routes"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        api_key = request.headers.get('X-API-Key')
+        if not api_key:
+            return jsonify({'error': 'API key required'}), 401
+        
+        # Find user with this API key
+        user = User.query.filter_by(api_key=api_key, active=True).first()
+        if not user:
+            return jsonify({'error': 'Invalid API key'}), 401
+            
+        return f(*args, **kwargs)
+    return decorated_function
+
+def certificate_required(f):
+    """Decorator for client certificate authenticated routes"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Check if client certificate is present
+        client_cert = request.environ.get('SSL_CLIENT_CERT')
+        if not client_cert:
+            # Fallback to API key authentication
+            return api_key_required(f)(*args, **kwargs)
+        
+        try:
+            # Validate certificate
+            cert_info = validate_client_certificate(client_cert)
+            if not cert_info['valid']:
+                return jsonify({'error': 'Invalid certificate'}), 401
+                
+            # Store certificate info for logging
+            request.cert_info = cert_info
+            logger.info(f"Certificate access: {cert_info['subject']} from {request.remote_addr}")
+            
+            return f(*args, **kwargs)
+            
+        except Exception as e:
+            logger.error(f"Certificate validation error: {e}")
+            return jsonify({'error': 'Certificate validation failed'}), 401
+    
+    return decorated_function
+
+def validate_client_certificate(cert_pem):
+    """Validate client certificate against our CA"""
+    try:
+        from cryptography import x509
+        from cryptography.hazmat.backends import default_backend
+        
+        # Parse certificate
+        cert = x509.load_pem_x509_certificate(cert_pem.encode(), default_backend())
+        
+        # Load our CA certificate
+        with open('certs/ca/mardi-gras-ca.crt', 'rb') as f:
+            ca_cert = x509.load_pem_x509_certificate(f.read(), default_backend())
+        
+        # Verify certificate is signed by our CA
+        try:
+            from cryptography.hazmat.primitives import hashes
+            from cryptography.hazmat.primitives.asymmetric import padding
+            
+            # For RSA signatures, we need to use the right verification method
+            ca_public_key = ca_cert.public_key()
+            
+            # Get the signature algorithm
+            signature_algorithm = cert.signature_algorithm_oid._name
+            
+            if 'sha256' in signature_algorithm.lower():
+                # Use SHA256 for verification
+                ca_public_key.verify(
+                    cert.signature,
+                    cert.tbs_certificate_bytes,
+                    padding.PKCS1v15(),
+                    hashes.SHA256()
+                )
+            else:
+                return {'valid': False, 'reason': f'Unsupported signature algorithm: {signature_algorithm}'}
+                
+        except Exception as e:
+            return {'valid': False, 'reason': f'Certificate signature verification failed: {str(e)}'}
+        
+        # Check if certificate is expired
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        
+        # Convert certificate dates to timezone-aware if needed
+        not_before = cert.not_valid_before
+        not_after = cert.not_valid_after
+        
+        if not_before.tzinfo is None:
+            not_before = not_before.replace(tzinfo=timezone.utc)
+        if not_after.tzinfo is None:
+            not_after = not_after.replace(tzinfo=timezone.utc)
+            
+        if now < not_before or now > not_after:
+            return {'valid': False, 'reason': 'Certificate expired or not yet valid'}
+        
+        # Extract certificate info
+        subject = cert.subject.rfc4514_string()
+        
+        # Check certificate type based on OU (Organizational Unit)
+        cert_type = 'unknown'
+        for attribute in cert.subject:
+            if attribute.oid._name == 'organizationalUnitName':
+                ou = attribute.value.lower()
+                if 'display' in ou:
+                    cert_type = 'display'
+                elif 'sales' in ou:
+                    cert_type = 'sales'
+                break
+        
+        return {
+            'valid': True,
+            'subject': subject,
+            'type': cert_type,
+            'expires': not_after,
+            'fingerprint': cert.fingerprint(cert.signature_hash_algorithm).hex()
+        }
+        
+    except Exception as e:
+        return {'valid': False, 'reason': f'Certificate parsing error: {str(e)}'}
+
+def flexible_auth_required(f):
+    """Allow either certificate or API key authentication"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Try certificate first
+        client_cert = request.environ.get('SSL_CLIENT_CERT')
+        if client_cert:
+            try:
+                cert_info = validate_client_certificate(client_cert)
+                if cert_info['valid']:
+                    request.cert_info = cert_info
+                    logger.info(f"Certificate access: {cert_info['subject']}")
+                    return f(*args, **kwargs)
+            except:
+                pass  # Fall through to API key auth
+        
+        # Fallback to API key
+        api_key = request.headers.get('X-API-Key')
+        if api_key:
+            user = User.query.filter_by(api_key=api_key, active=True).first()
+            if user:
+                logger.info(f"API key access: {user.email}")
+                return f(*args, **kwargs)
+        
+        return jsonify({'error': 'Authentication required (certificate or API key)'}), 401
+    
     return decorated_function
 
 def allowed_file(filename, file_type='stl'):
@@ -752,6 +973,20 @@ def admin_main_dashboard():
         'total_file_uploads': FileUploadLog.query.count(),
         # Add more as needed
     }
+    
+    # Add certificate and token stats for superadmins
+    if current_user.has_role('superadmin'):
+        # Count certificates
+        cert_counts = get_certificate_counts()
+        stats.update({
+            'total_certificates': cert_counts['total'],
+            'display_certificates': cert_counts['display'],
+            'sales_certificates': cert_counts['sales'],
+            'expiring_certificates': cert_counts['expiring'],
+            'users_with_api_keys': User.query.filter(User.api_key.isnot(None)).count(),
+            'total_api_keys': User.query.filter(User.api_key.isnot(None)).count()
+        })
+    
     return render_template('admin/main_dashboard.html', stats=stats)
 
 @app.route('/admin/csrf-token', methods=['GET'])
@@ -1860,6 +2095,773 @@ def set_password(token):
         return redirect(url_for('login'))
     return render_template('set_password.html', user=user)
 
+# ==================== CERTIFICATE MANAGEMENT ====================
+
+@app.route('/admin/certificates', methods=['GET'])
+@superadmin_required
+def admin_certificates():
+    """Certificate management interface"""
+    try:
+        # Get list of existing certificates
+        cert_dir = 'certs'
+        certificates = []
+        
+        # Scan display certificates
+        display_dir = os.path.join(cert_dir, 'displays')
+        if os.path.exists(display_dir):
+            for file in os.listdir(display_dir):
+                if file.endswith('.crt'):
+                    cert_path = os.path.join(display_dir, file)
+                    cert_info = get_certificate_info(cert_path)
+                    if cert_info:
+                        cert_info['type'] = 'display'
+                        cert_info['name'] = file.replace('.crt', '')
+                        certificates.append(cert_info)
+        
+        # Scan sales certificates  
+        sales_dir = os.path.join(cert_dir, 'sales')
+        if os.path.exists(sales_dir):
+            for file in os.listdir(sales_dir):
+                if file.endswith('.crt'):
+                    cert_path = os.path.join(sales_dir, file)
+                    cert_info = get_certificate_info(cert_path)
+                    if cert_info:
+                        cert_info['type'] = 'sales'
+                        cert_info['name'] = file.replace('.crt', '')
+                        certificates.append(cert_info)
+        
+        # Calculate expiring count
+        from datetime import datetime, timezone, timedelta
+        thirty_days = datetime.now(timezone.utc) + timedelta(days=30)
+        expiring_count = sum(1 for cert in certificates if cert.get('expires', datetime.max) < thirty_days)
+        
+        # Separate by type
+        display_certs = [c for c in certificates if c['type'] == 'display']
+        sales_certs = [c for c in certificates if c['type'] == 'sales']
+        
+        return render_template('admin/certificates.html',
+                             certificates=certificates,
+                             display_certs=display_certs,
+                             sales_certs=sales_certs,
+                             expiring_count=expiring_count)
+                             
+    except Exception as e:
+        logger.error(f"Error loading certificates: {e}")
+        flash('Error loading certificates', 'error')
+        return redirect(url_for('admin_main_dashboard'))
+
+def get_certificate_info(cert_path):
+    """Extract information from certificate file"""
+    try:
+        from cryptography import x509
+        from cryptography.hazmat.backends import default_backend
+        from datetime import timezone
+        
+        with open(cert_path, 'rb') as f:
+            cert = x509.load_pem_x509_certificate(f.read(), default_backend())
+        
+        # Convert dates to timezone-aware
+        not_before = cert.not_valid_before
+        not_after = cert.not_valid_after
+        
+        if not_before.tzinfo is None:
+            not_before = not_before.replace(tzinfo=timezone.utc)
+        if not_after.tzinfo is None:
+            not_after = not_after.replace(tzinfo=timezone.utc)
+        
+        now = datetime.now(timezone.utc)
+        
+        return {
+            'issued': not_before,
+            'expires': not_after,
+            'expired': now > not_after,
+            'expires_soon': (not_after - now).days < 30,
+            'subject': cert.subject.rfc4514_string()
+        }
+        
+    except Exception as e:
+        logger.error(f"Error reading certificate {cert_path}: {e}")
+        return None
+
+def get_certificate_counts():
+    """Get certificate counts for dashboard"""
+    try:
+        cert_dir = 'certs'
+        counts = {
+            'total': 0,
+            'display': 0,
+            'sales': 0,
+            'expiring': 0
+        }
+        
+        from datetime import datetime, timezone, timedelta
+        thirty_days = datetime.now(timezone.utc) + timedelta(days=30)
+        
+        # Count display certificates
+        display_dir = os.path.join(cert_dir, 'displays')
+        if os.path.exists(display_dir):
+            for file in os.listdir(display_dir):
+                if file.endswith('.crt'):
+                    cert_path = os.path.join(display_dir, file)
+                    cert_info = get_certificate_info(cert_path)
+                    if cert_info:
+                        counts['display'] += 1
+                        counts['total'] += 1
+                        if cert_info.get('expires', datetime.max) < thirty_days:
+                            counts['expiring'] += 1
+        
+        # Count sales certificates
+        sales_dir = os.path.join(cert_dir, 'sales')
+        if os.path.exists(sales_dir):
+            for file in os.listdir(sales_dir):
+                if file.endswith('.crt'):
+                    cert_path = os.path.join(sales_dir, file)
+                    cert_info = get_certificate_info(cert_path)
+                    if cert_info:
+                        counts['sales'] += 1
+                        counts['total'] += 1
+                        if cert_info.get('expires', datetime.max) < thirty_days:
+                            counts['expiring'] += 1
+        
+        return counts
+        
+    except Exception as e:
+        logger.error(f"Error counting certificates: {e}")
+        return {'total': 0, 'display': 0, 'sales': 0, 'expiring': 0}
+
+@app.route('/admin/certificates/generate-quick', methods=['POST'])
+@superadmin_required  
+def admin_generate_quick_certificate():
+    """Generate a quick-access certificate for current device"""
+    try:
+        # Get device info from request
+        device_name = request.form.get('device_name', '').strip()
+        duration = int(request.form.get('duration', 7))  # Default 7 days
+        purpose = request.form.get('purpose', 'quick-access')
+        
+        if not device_name:
+            return jsonify({'error': 'Device name required'}), 400
+            
+        # Validate duration (max 90 days for security)
+        if duration > 90:
+            return jsonify({'error': 'Maximum duration is 90 days'}), 400
+            
+        # Sanitize device name
+        import re
+        device_name = re.sub(r'[^a-zA-Z0-9-]', '-', device_name)
+        
+        # Add timestamp to ensure uniqueness
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+        cert_name = f"{device_name}-{timestamp}"
+        
+        # Generate certificate using our CA
+        cert_info = generate_web_certificate(cert_name, duration, purpose)
+        
+        if cert_info['success']:
+            # Log the generation
+            client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
+            logger.info(f"Quick certificate generated by {current_user.email} from {client_ip}: {cert_name} ({duration} days)")
+            
+            return jsonify({
+                'success': True,
+                'certificate_name': cert_name,
+                'download_url': f'/admin/certificates/{cert_name}/download',
+                'expires_days': duration,
+                'password': cert_info['password']
+            })
+        else:
+            return jsonify({'error': cert_info['error']}), 500
+            
+    except Exception as e:
+        logger.error(f"Error generating quick certificate: {e}")
+        return jsonify({'error': 'Failed to generate certificate'}), 500
+
+def generate_web_certificate(cert_name, duration_days, purpose):
+    """Generate certificate via web interface"""
+    try:
+        import subprocess
+        import secrets
+        
+        # Generate strong password
+        password = secrets.token_urlsafe(12)
+        
+        # Use our certificate generation script
+        result = subprocess.run([
+            'bash', 'scripts/create-web-cert.sh',
+            cert_name, str(duration_days), purpose, password
+        ], capture_output=True, text=True, cwd='.')
+        
+        if result.returncode == 0:
+            return {
+                'success': True,
+                'password': password,
+                'output': result.stdout
+            }
+        else:
+            return {
+                'success': False,
+                'error': f"Certificate generation failed: {result.stderr}"
+            }
+            
+    except Exception as e:
+        return {
+            'success': False,
+            'error': f"Certificate generation error: {str(e)}"
+        }
+
+@app.route('/admin/certificates/<cert_name>/download')
+@superadmin_required
+def admin_download_certificate(cert_name):
+    """Download certificate file"""
+    try:
+        # Sanitize certificate name
+        import re
+        cert_name = re.sub(r'[^a-zA-Z0-9-]', '', cert_name)
+        
+        # Look for certificate in both directories
+        cert_paths = [
+            f"certs/sales/{cert_name}.p12",
+            f"certs/displays/{cert_name}.p12"
+        ]
+        
+        cert_path = None
+        for path in cert_paths:
+            if os.path.exists(path):
+                cert_path = path
+                break
+        
+        if not cert_path:
+            flash('Certificate not found', 'error')
+            return redirect(url_for('admin_certificates'))
+        
+        # Log download
+        client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
+        logger.info(f"Certificate downloaded by {current_user.email} from {client_ip}: {cert_name}")
+        
+        return send_file(cert_path, as_attachment=True, download_name=f"{cert_name}.p12")
+        
+    except Exception as e:
+        logger.error(f"Error downloading certificate: {e}")
+        flash('Error downloading certificate', 'error')
+        return redirect(url_for('admin_certificates'))
+
+@app.route('/admin/certificates/<cert_name>/revoke', methods=['POST'])
+@superadmin_required
+def admin_revoke_certificate(cert_name):
+    """Revoke a certificate by moving it to revoked directory"""
+    try:
+        # Sanitize certificate name
+        import re
+        cert_name = re.sub(r'[^a-zA-Z0-9-]', '', cert_name)
+        
+        # Find certificate in both directories
+        source_paths = [
+            f"certs/sales/{cert_name}.p12",
+            f"certs/displays/{cert_name}.p12"
+        ]
+        
+        cert_files = [
+            f"{cert_name}.p12",
+            f"{cert_name}.crt", 
+            f"{cert_name}.key",
+            f"{cert_name}.csr",
+            f"{cert_name}-install.txt"
+        ]
+        
+        moved_files = []
+        cert_found = False
+        
+        # Check both source directories
+        for source_dir in ["certs/sales", "certs/displays"]:
+            cert_p12_path = f"{source_dir}/{cert_name}.p12"
+            if os.path.exists(cert_p12_path):
+                cert_found = True
+                
+                # Create revoked directory if it doesn't exist
+                revoked_dir = "certs/revoked"
+                os.makedirs(revoked_dir, exist_ok=True)
+                
+                # Move all related certificate files
+                for cert_file in cert_files:
+                    source_file = f"{source_dir}/{cert_file}"
+                    if os.path.exists(source_file):
+                        dest_file = f"{revoked_dir}/{cert_file}"
+                        
+                        # If destination exists, add timestamp
+                        if os.path.exists(dest_file):
+                            from datetime import datetime
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            name, ext = os.path.splitext(cert_file)
+                            dest_file = f"{revoked_dir}/{name}_revoked_{timestamp}{ext}"
+                        
+                        os.rename(source_file, dest_file)
+                        moved_files.append(cert_file)
+                
+                break
+        
+        if not cert_found:
+            return jsonify({'error': 'Certificate not found'}), 404
+        
+        # Log revocation
+        client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
+        logger.info(f"Certificate revoked by {current_user.email} from {client_ip}: {cert_name} (moved {len(moved_files)} files)")
+        
+        return jsonify({
+            'success': True,
+            'message': f'Certificate {cert_name} revoked successfully',
+            'moved_files': moved_files
+        })
+        
+    except Exception as e:
+        logger.error(f"Error revoking certificate: {e}")
+        return jsonify({'error': f'Error revoking certificate: {str(e)}'}), 500
+
+@app.route('/admin/certificates/create-display', methods=['POST'])
+@superadmin_required
+def admin_create_display_certificate():
+    """Create a new display certificate"""
+    try:
+        display_name = request.form.get('display_name', '').strip()
+        location = request.form.get('location', '').strip()
+        
+        if not display_name or not location:
+            flash('Display name and location are required', 'error')
+            return redirect(url_for('admin_certificates'))
+        
+        # Sanitize display name for filename
+        import re
+        safe_name = re.sub(r'[^a-zA-Z0-9-]', '-', display_name)
+        cert_name = f"{safe_name}-ipad"
+        
+        # Run certificate generation script
+        try:
+            result = subprocess.run([
+                "./scripts/create-display-cert-demo.sh",
+                cert_name,
+                location
+            ], capture_output=True, text=True, check=True)
+            
+            flash(f'Display certificate created successfully: {cert_name}', 'success')
+            logger.info(f"Display certificate created by {current_user.email}: {cert_name}")
+            
+        except subprocess.CalledProcessError as e:
+            flash(f'Error creating certificate: {e.stderr}', 'error')
+            logger.error(f"Certificate creation failed: {e}")
+        
+        return redirect(url_for('admin_certificates'))
+        
+    except Exception as e:
+        logger.error(f"Error creating display certificate: {e}")
+        flash('Error creating display certificate', 'error')
+        return redirect(url_for('admin_certificates'))
+
+@app.route('/admin/certificates/create-sales', methods=['POST'])
+@superadmin_required
+def admin_create_sales_certificate():
+    """Create a new sales certificate"""
+    try:
+        staff_name = request.form.get('staff_name', '').strip()
+        duration = request.form.get('duration', '30').strip()
+        
+        if not staff_name:
+            flash('Staff name is required', 'error')
+            return redirect(url_for('admin_certificates'))
+        
+        # Sanitize staff name for filename
+        import re
+        safe_name = re.sub(r'[^a-zA-Z0-9-]', '-', staff_name)
+        
+        # Validate duration
+        try:
+            duration_days = int(duration)
+            if duration_days > 90:
+                duration_days = 90  # Max 90 days
+        except ValueError:
+            duration_days = 30  # Default
+        
+        # Generate certificate name with timestamp
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d")
+        cert_name = f"{safe_name}-{timestamp}"
+        password = "sales123"  # Standard password for sales certs
+        
+        # Run certificate generation script
+        try:
+            result = subprocess.run([
+                "./scripts/create-web-cert.sh",
+                cert_name,
+                str(duration_days),
+                "sales",
+                password
+            ], capture_output=True, text=True, check=True)
+            
+            flash(f'Sales certificate created successfully: {cert_name}', 'success')
+            logger.info(f"Sales certificate created by {current_user.email}: {cert_name} ({duration_days} days)")
+            
+        except subprocess.CalledProcessError as e:
+            flash(f'Error creating certificate: {e.stderr}', 'error')
+            logger.error(f"Certificate creation failed: {e}")
+        
+        return redirect(url_for('admin_certificates'))
+        
+    except Exception as e:
+        logger.error(f"Error creating sales certificate: {e}")
+        flash('Error creating sales certificate', 'error')
+        return redirect(url_for('admin_certificates'))
+
+@app.route('/admin/tokens', methods=['GET'])
+@superadmin_required
+def admin_tokens():
+    """API Token management interface"""
+    try:
+        # Get all users with API keys
+        users_with_tokens = User.query.filter(User.api_key.isnot(None)).all()
+        
+        # Get users without API keys for assignment
+        users_without_tokens = User.query.filter(User.api_key.is_(None), User.active == True).all()
+        
+        # Calculate token stats
+        total_tokens = len(users_with_tokens)
+        active_tokens = len([u for u in users_with_tokens if u.active])
+        
+        return render_template('admin/tokens.html',
+                             users_with_tokens=users_with_tokens,
+                             users_without_tokens=users_without_tokens,
+                             total_tokens=total_tokens,
+                             active_tokens=active_tokens)
+                             
+    except Exception as e:
+        logger.error(f"Error loading tokens: {e}")
+        flash('Error loading API tokens', 'error')
+        return redirect(url_for('admin_main_dashboard'))
+
+@app.route('/admin/tokens/bulk-generate', methods=['POST'])
+@superadmin_required
+def admin_bulk_generate_tokens():
+    """Generate API tokens for all users without tokens"""
+    try:
+        users_without_tokens = User.query.filter(User.api_key.is_(None), User.active == True).all()
+        
+        generated_count = 0
+        for user in users_without_tokens:
+            user.api_key = secrets.token_urlsafe(32)
+            generated_count += 1
+        
+        db.session.commit()
+        
+        logger.info(f"Bulk generated {generated_count} API tokens by {current_user.email}")
+        
+        return jsonify({
+            'success': True,
+            'message': f'Generated {generated_count} API tokens',
+            'generated_count': generated_count
+        })
+        
+    except Exception as e:
+        logger.error(f"Error bulk generating tokens: {e}")
+        return jsonify({'error': f'Error generating tokens: {str(e)}'}), 500
+
+@app.route('/certificate/validate', methods=['POST'])
+@csrf.exempt
+@flexible_auth_required
+def validate_certificate():
+    """Validate a client certificate against the database"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'error': 'Invalid Request',
+                'message': 'JSON data is required for certificate validation.',
+                'code': 'INVALID_REQUEST_FORMAT',
+                'expected': 'JSON with commonName, fingerprint, organization, organizationalUnit'
+            }), 400
+        
+        common_name = data.get('commonName')
+        fingerprint = data.get('fingerprint')
+        organization = data.get('organization')
+        organizational_unit = data.get('organizationalUnit')
+        
+        if not common_name:
+            return jsonify({
+                'error': 'Missing Parameter',
+                'message': 'Certificate common name is required for validation.',
+                'code': 'MISSING_COMMON_NAME',
+                'required_field': 'commonName'
+            }), 400
+        
+        # Check if certificate exists in our database (not revoked)
+        certificate = Certificate.query.filter_by(
+            common_name=common_name,
+            is_active=True,
+            is_revoked=False
+        ).first()
+        
+        cert_found = certificate is not None
+        cert_valid = False
+        cert_info = None
+        
+        if certificate:
+            # Check if certificate is valid (not expired and fingerprint matches)
+            if not certificate.is_expired() and (not fingerprint or certificate.fingerprint == fingerprint):
+                cert_valid = True
+                cert_info = {
+                    'expires': certificate.valid_until,
+                    'issued': certificate.valid_from,
+                    'expired': certificate.is_expired(),
+                    'expires_soon': certificate.expires_soon()
+                }
+        
+        # Log validation attempt
+        client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
+        logger.info(f"Certificate validation request from {client_ip}: {common_name} -> {'valid' if cert_valid else 'invalid'}")
+        
+        result = {
+            'valid': cert_valid,
+            'found': cert_found,
+            'common_name': common_name,
+            'status': 'active' if cert_valid else ('revoked' if cert_found else 'not_found')
+        }
+        
+        if cert_info:
+            result.update({
+                'expires': cert_info['expires'].isoformat() if cert_info['expires'] else None,
+                'issued': cert_info['issued'].isoformat() if cert_info['issued'] else None,
+                'expired': cert_info.get('expired', False),
+                'expires_soon': cert_info.get('expires_soon', False)
+            })
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error validating certificate: {e}", exc_info=True)
+        return jsonify({
+            'error': 'Certificate Validation Failed',
+            'message': 'An unexpected error occurred while validating the certificate. Please try again.',
+            'code': 'VALIDATION_SYSTEM_ERROR',
+            'support': 'Contact IT support if this error persists',
+            'timestamp': datetime.utcnow().isoformat()
+        }), 500
+
+# ==================== CERTIFICATE MANAGEMENT API ====================
+
+@app.route('/api/certificates', methods=['GET'])
+@flexible_auth_required
+def api_list_certificates():
+    """List all certificates"""
+    try:
+        certificates = Certificate.query.filter_by(is_active=True).all()
+        return jsonify({
+            'success': True,
+            'certificates': [cert.to_dict() for cert in certificates]
+        })
+    except Exception as e:
+        logger.error(f"Error listing certificates: {e}")
+        return jsonify({'error': 'Failed to list certificates'}), 500
+
+@app.route('/api/certificates/<certificate_type>', methods=['POST'])
+@superadmin_required
+def api_upload_certificate(certificate_type):
+    """Upload certificate to database"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'JSON data required'}), 400
+        
+        # Extract certificate data from PEM
+        import cryptography
+        from cryptography import x509
+        from cryptography.hazmat.backends import default_backend
+        import hashlib
+        
+        cert_pem = data.get('certificate_data')
+        key_pem = data.get('private_key_data')
+        common_name = data.get('common_name')
+        purpose = data.get('purpose', certificate_type)
+        
+        if not cert_pem or not common_name:
+            return jsonify({'error': 'certificate_data and common_name required'}), 400
+        
+        # Parse certificate to extract metadata
+        try:
+            cert_obj = x509.load_pem_x509_certificate(cert_pem.encode(), default_backend())
+            
+            # Generate fingerprint
+            fingerprint = hashlib.sha256(cert_obj.public_bytes()).hexdigest()
+            
+            # Extract subject and issuer
+            subject = str(cert_obj.subject)
+            issuer = str(cert_obj.issuer)
+            
+            # Extract validity dates
+            valid_from = cert_obj.not_valid_before.replace(tzinfo=None)
+            valid_until = cert_obj.not_valid_after.replace(tzinfo=None)
+            
+        except Exception as cert_error:
+            return jsonify({'error': f'Invalid certificate format: {cert_error}'}), 400
+        
+        # Check if certificate already exists
+        existing = Certificate.query.filter_by(common_name=common_name).first()
+        if existing:
+            return jsonify({'error': 'Certificate with this common name already exists'}), 409
+        
+        # Create certificate record
+        certificate = Certificate(
+            common_name=common_name,
+            certificate_type=certificate_type,
+            purpose=purpose,
+            certificate_data=cert_pem,
+            private_key_data=key_pem,
+            fingerprint=fingerprint,
+            issuer=issuer,
+            subject=subject,
+            valid_from=valid_from,
+            valid_until=valid_until,
+            created_by=current_user.id if current_user.is_authenticated else None
+        )
+        
+        db.session.add(certificate)
+        db.session.commit()
+        
+        logger.info(f"Certificate uploaded: {common_name} by {current_user.email if current_user.is_authenticated else 'system'}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Certificate uploaded successfully',
+            'certificate': certificate.to_dict()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error uploading certificate: {e}")
+        return jsonify({'error': 'Failed to upload certificate'}), 500
+
+@app.route('/api/certificates/<int:cert_id>/revoke', methods=['POST'])
+@superadmin_required
+def api_revoke_certificate(cert_id):
+    """Revoke a certificate"""
+    try:
+        certificate = Certificate.query.get_or_404(cert_id)
+        
+        data = request.get_json() or {}
+        reason = data.get('reason', 'Administrative revocation')
+        
+        certificate.is_revoked = True
+        certificate.revoked_at = datetime.utcnow()
+        certificate.revoked_reason = reason
+        
+        db.session.commit()
+        
+        logger.info(f"Certificate revoked: {certificate.common_name} by {current_user.email}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Certificate revoked successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error revoking certificate: {e}")
+        return jsonify({'error': 'Failed to revoke certificate'}), 500
+
+@app.route('/api/certificates/server/<cert_type>', methods=['GET'])
+@flexible_auth_required
+def api_get_server_certificates(cert_type):
+    """Get server certificates for Pixie Viewer"""
+    try:
+        # Get the appropriate certificates based on type
+        if cert_type == 'server':
+            cert = Certificate.query.filter_by(
+                certificate_type='server',
+                purpose='pixie-viewer',
+                is_active=True,
+                is_revoked=False
+            ).first()
+        elif cert_type == 'ca':
+            cert = Certificate.query.filter_by(
+                certificate_type='ca',
+                purpose='ca',
+                is_active=True,
+                is_revoked=False
+            ).first()
+        else:
+            return jsonify({'error': 'Invalid certificate type'}), 400
+        
+        if not cert:
+            return jsonify({'error': 'Certificate not found'}), 404
+        
+        # Return only the certificate data (not private key for CA)
+        result = {
+            'success': True,
+            'certificate_data': cert.certificate_data,
+            'common_name': cert.common_name,
+            'valid_until': cert.valid_until.isoformat()
+        }
+        
+        # Include private key only for server certificates
+        if cert_type == 'server' and cert.private_key_data:
+            result['private_key_data'] = cert.private_key_data
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error getting server certificate: {e}")
+        return jsonify({'error': 'Failed to get certificate'}), 500
+
+# ==================== API KEY MANAGEMENT ====================
+
+@app.route('/admin/users/<int:user_id>/api-key/generate', methods=['POST'])
+@superadmin_required
+def admin_generate_api_key(user_id):
+    """Generate API key for user"""
+    try:
+        user = User.query.get_or_404(user_id)
+        
+        # Generate new API key
+        user.api_key = secrets.token_urlsafe(32)
+        db.session.commit()
+        
+        logger.info(f"Generated API key for user {user.email}")
+        return jsonify({'success': True, 'message': 'API key generated successfully'})
+        
+    except Exception as e:
+        logger.error(f"Error generating API key: {e}")
+        return jsonify({'error': 'Failed to generate API key'}), 500
+
+@app.route('/admin/users/<int:user_id>/api-key/regenerate', methods=['POST'])
+@superadmin_required
+def admin_regenerate_api_key(user_id):
+    """Regenerate API key for user"""
+    try:
+        user = User.query.get_or_404(user_id)
+        
+        old_key = user.api_key
+        user.api_key = secrets.token_urlsafe(32)
+        db.session.commit()
+        
+        logger.info(f"Regenerated API key for user {user.email} (old key: {old_key[:8]}...)")
+        return jsonify({'success': True, 'message': 'API key regenerated successfully'})
+        
+    except Exception as e:
+        logger.error(f"Error regenerating API key: {e}")
+        return jsonify({'error': 'Failed to regenerate API key'}), 500
+
+@app.route('/admin/users/<int:user_id>/api-key/revoke', methods=['POST'])
+@superadmin_required
+def admin_revoke_api_key(user_id):
+    """Revoke API key for user"""
+    try:
+        user = User.query.get_or_404(user_id)
+        
+        old_key = user.api_key
+        user.api_key = None
+        db.session.commit()
+        
+        logger.info(f"Revoked API key for user {user.email} (key: {old_key[:8]}...)")
+        return jsonify({'success': True, 'message': 'API key revoked successfully'})
+        
+    except Exception as e:
+        logger.error(f"Error revoking API key: {e}")
+        return jsonify({'error': 'Failed to revoke API key'}), 500
+
 # ==================== UTILITY FUNCTIONS ====================
 
 def create_slug(text):
@@ -1881,14 +2883,71 @@ def not_found_error(error):
         if not current_user.is_authenticated:
             return redirect(url_for('login'))
         return render_template('admin/404.html'), 404
-    return jsonify({'error': 'Resource not found'}), 404
+    
+    # Enhanced API error response
+    return jsonify({
+        'error': 'Resource Not Found',
+        'message': 'The requested resource does not exist or you do not have permission to access it.',
+        'code': 'RESOURCE_NOT_FOUND',
+        'path': request.path,
+        'support': 'Verify the URL is correct or contact support if you believe this is an error'
+    }), 404
 
 @app.errorhandler(500)
 def internal_error(error):
     db.session.rollback()
+    
+    # Log the actual error for debugging
+    logger.error(f"Internal server error: {str(error)}", exc_info=True)
+    
     if request.path.startswith('/admin'):
         return render_template('admin/500.html'), 500
-    return jsonify({'error': 'Internal server error'}), 500
+    
+    # Enhanced API error response
+    return jsonify({
+        'error': 'Internal Server Error',
+        'message': 'An unexpected error occurred while processing your request. Please try again later.',
+        'code': 'INTERNAL_SERVER_ERROR',
+        'support': 'If this error persists, please contact IT support',
+        'timestamp': datetime.utcnow().isoformat()
+    }), 500
+
+@app.errorhandler(403)
+def forbidden_error(error):
+    if request.path.startswith('/admin'):
+        if not current_user.is_authenticated:
+            return redirect(url_for('login'))
+        flash('Access denied. You do not have permission to access this resource.', 'error')
+        return redirect(url_for('admin_main_dashboard'))
+    
+    return jsonify({
+        'error': 'Access Forbidden',
+        'message': 'You do not have permission to access this resource.',
+        'code': 'ACCESS_FORBIDDEN',
+        'support': 'Contact your administrator if you believe you should have access'
+    }), 403
+
+@app.errorhandler(401)
+def unauthorized_error(error):
+    if request.path.startswith('/admin'):
+        return redirect(url_for('login'))
+    
+    return jsonify({
+        'error': 'Authentication Required',
+        'message': 'Valid authentication credentials are required to access this resource.',
+        'code': 'AUTHENTICATION_REQUIRED',
+        'support': 'Please provide valid credentials or contact support'
+    }), 401
+
+@app.errorhandler(429)
+def rate_limit_error(error):
+    return jsonify({
+        'error': 'Rate Limit Exceeded',
+        'message': 'Too many requests. Please wait before trying again.',
+        'code': 'RATE_LIMIT_EXCEEDED',
+        'retry_after': '60 seconds',
+        'support': 'If you need higher limits, contact your administrator'
+    }), 429
 
 # JWT Error Handlers
 @jwt.expired_token_loader
@@ -2548,6 +3607,7 @@ def pixie_api_past_projects():
         return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/pixie/api/download/stl/<file_id>', methods=['GET'])
+@flexible_auth_required
 def pixie_api_download_stl(file_id):
     """Public API: Download STL file for Pixie viewer"""
     try:
@@ -2777,7 +3837,7 @@ def migrate_database():
                 except Exception as col_error:
                     flash(f'Column type fix error: {str(col_error)}', 'warning')
                 
-            return redirect(url_for('admin_dashboard'))
+            return redirect(url_for('admin_main_dashboard'))
             
         except Exception as e:
             flash(f'Migration error: {str(e)}', 'error')
