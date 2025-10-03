@@ -2631,7 +2631,7 @@ def admin_bulk_generate_tokens():
 @app.route('/certificate/validate', methods=['POST'])
 @csrf.exempt
 @flexible_auth_required
-def validate_certificate():
+def validate_client_certificate():
     """Validate a client certificate against the database"""
     try:
         data = request.get_json()
