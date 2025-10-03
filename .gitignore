@@ -52,7 +52,6 @@ node_modules/
 *.old
 
 # Development scripts and temporary files
-*.sh
 cookies*.txt
 response.html
 *_backup*
