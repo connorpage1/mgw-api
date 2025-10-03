@@ -3698,11 +3698,7 @@ def pixie_api_download_stl(file_id):
 @app.route('/health')
 def health_check():
     """Health check endpoint"""
-    return jsonify({
-        'status': 'healthy',
-        'timestamp': datetime.utcnow().isoformat(),
-        'version': '3.0.0-full-crud'
-    })
+    return 'OK', 200
 
 # ==================== DATABASE INITIALIZATION ====================
 
