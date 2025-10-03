@@ -2276,6 +2276,12 @@ def set_password(token):
 
 # ==================== CERTIFICATE MANAGEMENT ====================
 
+@app.route('/admin/certificates/guide')
+@admin_required
+def admin_certificate_guide():
+    """Show certificate installation guide"""
+    return render_template('admin/certificate_guide.html')
+
 @app.route('/admin/certificates', methods=['GET'])
 @superadmin_required
 def admin_certificates():
@@ -2624,7 +2630,7 @@ def admin_create_display_certificate():
             if not result['success']:
                 raise subprocess.CalledProcessError(1, 'create-display-cert-demo.sh', result['error'])
             
-            flash(f'Display certificate created successfully: {cert_name}', 'success')
+            flash(f'Display certificate created successfully: {cert_name}. Password: display123', 'success')
             logger.info(f"Display certificate created by {current_user.email}: {cert_name}")
             
         except subprocess.CalledProcessError as e:
@@ -2681,7 +2687,7 @@ def admin_create_sales_certificate():
             if not result['success']:
                 raise subprocess.CalledProcessError(1, 'create-web-cert.sh', result['error'])
             
-            flash(f'Sales certificate created successfully: {cert_name}', 'success')
+            flash(f'Sales certificate created successfully: {cert_name}. Password: sales123', 'success')
             logger.info(f"Sales certificate created by {current_user.email}: {cert_name} ({duration_days} days)")
             
         except subprocess.CalledProcessError as e:
