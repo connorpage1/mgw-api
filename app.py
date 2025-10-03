@@ -1022,7 +1022,6 @@ def validate_certificate():
 @admin_required
 def admin_root():
     """Admin root - redirect to main dashboard"""
-    ensure_db_initialized()
     return redirect(url_for('admin_main_dashboard'))
 
 @app.route('/admin/dashboard')
