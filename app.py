@@ -89,6 +89,119 @@ app.config['AWS_ACCESS_KEY_ID'] = os.environ.get('AWS_ACCESS_KEY_ID')
 app.config['AWS_SECRET_ACCESS_KEY'] = os.environ.get('AWS_SECRET_ACCESS_KEY')
 app.config['AWS_REGION'] = os.environ.get('AWS_REGION', 'us-east-1')
 
+# Robust script execution helper
+def run_certificate_script(script_name, *args):
+    """
+    Robust helper function to execute certificate scripts
+    Args:
+        script_name: Name of the script (e.g., 'create-web-cert.sh')
+        *args: Arguments to pass to the script
+    Returns:
+        dict: {'success': bool, 'output': str, 'error': str}
+    """
+    import subprocess
+    import os
+    
+    try:
+        # Build absolute path to script
+        script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scripts', script_name)
+        
+        # Check if script exists
+        if not os.path.exists(script_path):
+            return {
+                'success': False,
+                'output': '',
+                'error': f'Script not found: {script_path}'
+            }
+        
+        # Check if script is executable
+        if not os.access(script_path, os.X_OK):
+            return {
+                'success': False,
+                'output': '',
+                'error': f'Script not executable: {script_path}'
+            }
+        
+        # Execute script with timeout for safety
+        result = subprocess.run([
+            'bash', script_path
+        ] + list(args), 
+        capture_output=True, 
+        text=True, 
+        timeout=120,  # 2 minute timeout
+        check=False  # Don't raise exception on non-zero exit
+        )
+        
+        return {
+            'success': result.returncode == 0,
+            'output': result.stdout,
+            'error': result.stderr if result.returncode != 0 else ''
+        }
+        
+    except subprocess.TimeoutExpired:
+        return {
+            'success': False,
+            'output': '',
+            'error': 'Script execution timed out (2 minutes)'
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'output': '',
+            'error': f'Unexpected error: {str(e)}'
+        }
+
+def validate_certificate_system():
+    """Validate that the certificate system is properly set up"""
+    import os
+    
+    issues = []
+    app_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Check scripts directory exists
+    scripts_dir = os.path.join(app_dir, 'scripts')
+    if not os.path.exists(scripts_dir):
+        issues.append("Scripts directory not found")
+    
+    # Check required scripts exist
+    required_scripts = [
+        'create-web-cert.sh',
+        'create-display-cert-demo.sh',
+        'setup-ca.sh'
+    ]
+    
+    for script in required_scripts:
+        script_path = os.path.join(scripts_dir, script)
+        if not os.path.exists(script_path):
+            issues.append(f"Required script missing: {script}")
+        elif not os.access(script_path, os.X_OK):
+            issues.append(f"Script not executable: {script}")
+    
+    # Check certs directory structure
+    certs_dir = os.path.join(app_dir, 'certs')
+    if not os.path.exists(certs_dir):
+        issues.append("Certificates directory not found")
+    else:
+        required_dirs = ['ca', 'sales', 'displays', 'server']
+        for cert_dir in required_dirs:
+            dir_path = os.path.join(certs_dir, cert_dir)
+            if not os.path.exists(dir_path):
+                issues.append(f"Certificate subdirectory missing: {cert_dir}")
+    
+    # Check CA files exist
+    ca_cert = os.path.join(certs_dir, 'ca', 'mardi-gras-ca.crt')
+    ca_key = os.path.join(certs_dir, 'ca', 'mardi-gras-ca.key')
+    
+    if not os.path.exists(ca_cert):
+        issues.append("CA certificate not found")
+    if not os.path.exists(ca_key):
+        issues.append("CA private key not found")
+    
+    return {
+        'valid': len(issues) == 0,
+        'issues': issues
+    }
+
 # Initialize Extensions
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
@@ -2352,22 +2465,22 @@ def generate_web_certificate(cert_name, duration_days, purpose):
         # Generate strong password
         password = secrets.token_urlsafe(12)
         
-        # Use our certificate generation script
-        result = subprocess.run([
-            'bash', 'scripts/create-web-cert.sh',
+        # Use our robust script execution helper
+        result = run_certificate_script(
+            'create-web-cert.sh',
             cert_name, str(duration_days), purpose, password
-        ], capture_output=True, text=True, cwd='.')
+        )
         
-        if result.returncode == 0:
+        if result['success']:
             return {
                 'success': True,
                 'password': password,
-                'output': result.stdout
+                'output': result['output']
             }
         else:
             return {
                 'success': False,
-                'error': f"Certificate generation failed: {result.stderr}"
+                'error': f"Certificate generation failed: {result['error']}"
             }
             
     except Exception as e:
@@ -2502,11 +2615,14 @@ def admin_create_display_certificate():
         
         # Run certificate generation script
         try:
-            result = subprocess.run([
-                "./scripts/create-display-cert-demo.sh",
+            result = run_certificate_script(
+                'create-display-cert-demo.sh',
                 cert_name,
                 location
-            ], capture_output=True, text=True, check=True)
+            )
+            
+            if not result['success']:
+                raise subprocess.CalledProcessError(1, 'create-display-cert-demo.sh', result['error'])
             
             flash(f'Display certificate created successfully: {cert_name}', 'success')
             logger.info(f"Display certificate created by {current_user.email}: {cert_name}")
@@ -2554,13 +2670,16 @@ def admin_create_sales_certificate():
         
         # Run certificate generation script
         try:
-            result = subprocess.run([
-                "./scripts/create-web-cert.sh",
+            result = run_certificate_script(
+                'create-web-cert.sh',
                 cert_name,
                 str(duration_days),
                 "sales",
                 password
-            ], capture_output=True, text=True, check=True)
+            )
+            
+            if not result['success']:
+                raise subprocess.CalledProcessError(1, 'create-web-cert.sh', result['error'])
             
             flash(f'Sales certificate created successfully: {cert_name}', 'success')
             logger.info(f"Sales certificate created by {current_user.email}: {cert_name} ({duration_days} days)")
@@ -3881,6 +4000,47 @@ def db_info():
         return jsonify({'error': str(e), 'type': type(e).__name__}), 500
 
 # Database migration endpoint
+@app.route('/admin/system-status')
+@admin_required  
+def admin_system_status():
+    """Display system status and certificate system health"""
+    try:
+        # Validate certificate system
+        cert_validation = validate_certificate_system()
+        
+        # Check script execution with a simple test
+        test_result = run_certificate_script('setup-ca.sh', '--help')
+        script_test = {
+            'working': test_result['success'] or 'usage' in test_result['output'].lower() or 'help' in test_result['output'].lower(),
+            'details': test_result['output'][:200] if test_result['output'] else test_result['error'][:200]
+        }
+        
+        # Get file counts
+        import os
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        certs_dir = os.path.join(app_dir, 'certs')
+        
+        file_counts = {}
+        for subdir in ['ca', 'sales', 'displays', 'server']:
+            dir_path = os.path.join(certs_dir, subdir)
+            if os.path.exists(dir_path):
+                file_counts[subdir] = len([f for f in os.listdir(dir_path) if f.endswith(('.crt', '.key', '.p12'))])
+            else:
+                file_counts[subdir] = 0
+        
+        system_status = {
+            'certificate_system': cert_validation,
+            'script_execution': script_test,
+            'certificate_counts': file_counts,
+            'database_connected': True  # If we got this far, DB is connected
+        }
+        
+        return jsonify(system_status) if request.headers.get('Content-Type') == 'application/json' else render_template('admin/dashboard.html', system_status=system_status)
+                             
+    except Exception as e:
+        flash(f'Error checking system status: {str(e)}', 'error')
+        return redirect(url_for('admin_main_dashboard'))
+
 @app.route('/admin/migrate-database', methods=['GET', 'POST'])
 @jwt_required(optional=True)
 def migrate_database():
