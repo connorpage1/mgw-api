@@ -1022,12 +1022,14 @@ def validate_certificate():
 @admin_required
 def admin_root():
     """Admin root - redirect to main dashboard"""
+    ensure_db_initialized()
     return redirect(url_for('admin_main_dashboard'))
 
 @app.route('/admin/dashboard')
 @admin_required
 def admin_main_dashboard():
     """Main admin dashboard for managing all apps"""
+    ensure_db_initialized()
     # You can add more app stats here as you add more modules
     stats = {
         'glossary_terms': Term.query.count(),
@@ -3912,6 +3914,21 @@ def migrate_database():
     
     return render_template('admin/migrate.html')
 
+# Lazy initialization flag
+_db_initialized = False
+
+def ensure_db_initialized():
+    """Ensure database is initialized (lazy loading)"""
+    global _db_initialized
+    if not _db_initialized:
+        try:
+            init_production_app()
+            _db_initialized = True
+        except Exception as e:
+            print(f"⚠️  Database initialization failed: {e}")
+            # Continue anyway to allow health checks to work
+            pass
+
 # Production initialization
 def init_production_app():
     """Initialize app for production deployment"""
@@ -3992,8 +4009,8 @@ def manual_init_database():
             'message': 'Database initialization failed'
         }, 500
 
-# Initialize database tables on startup
-init_production_app()
+# Database initialization will be done lazily on first request
+# Removed blocking init_production_app() call to fix Railway healthcheck
 
 if __name__ == '__main__':
     print("🚀 Starting Mardi Gras API with Full CRUD & Admin GUI...")
