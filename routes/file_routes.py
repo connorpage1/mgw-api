@@ -69,4 +69,4 @@ def files_list():
     except Exception as e:
         logger.error(f"Error loading files list: {e}")
         flash('Error loading files', 'error')
-        return redirect(url_for('file.dashboard'))
+        return redirect(url_for('files.dashboard'))

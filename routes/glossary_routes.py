@@ -215,3 +215,15 @@ def terms_list():
         logger.error(f"Error loading terms list: {e}")
         flash('Error loading terms', 'error')
         return redirect(url_for('glossary.dashboard'))
+
+@glossary_bp.route('/categories-list')
+@admin_required  
+def categories_list():
+    """Admin categories list"""
+    try:
+        categories = Category.query.order_by(Category.sort_order, Category.name).all()
+        return render_template('admin/categories_list.html', categories=categories)
+    except Exception as e:
+        logger.error(f"Error loading categories list: {e}")
+        flash('Error loading categories', 'error')
+        return redirect(url_for('glossary.dashboard'))

@@ -111,7 +111,7 @@
                         </a>
                     </li>
                     <li>
-                        <a href="{{ url_for('files.list') }}" 
+                        <a href="{{ url_for('files.files_list') }}" 
                            class="flex items-center px-4 py-3 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all {% if request.endpoint and 'files' in request.endpoint and 'list' in request.endpoint %}bg-white bg-opacity-20{% endif %}">
                             <i class="fas fa-file-upload mr-3"></i>Manage Files
                         </a>
