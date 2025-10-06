@@ -147,60 +147,6 @@ def create_app(config_name=None):
         """Main application index"""
         return redirect(url_for('admin.dashboard'))
     
-    @app.route('/login', methods=['GET', 'POST'])
-    def login():
-        """Main login endpoint"""
-        if request.method == 'GET':
-            return render_template('admin/login.html')
-        
-        try:
-            # Rate limiting based on IP address
-            client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
-            if rate_limiter.is_rate_limited(client_ip):
-                error = 'Too many failed attempts. Please try again in 15 minutes.'
-                return render_template('admin/login.html', error=error), 429
-            
-            data = request.get_json() if request.is_json else request.form
-            if not data or not data.get('email') or not data.get('password'):
-                error = 'Email and password required.'
-                return render_template('admin/login.html', error=error)
-            
-            user = User.query.filter_by(email=data['email'], active=True).first()
-            if not user or not secure_hasher.verify_password(data['password'], user.password):
-                # Record failed attempt for rate limiting
-                rate_limiter.record_login_attempt(client_ip)
-                error = 'Invalid credentials.'
-                return render_template('admin/login.html', error=error)
-            
-            # Update login tracking
-            user.last_login_at = user.current_login_at
-            user.last_login_ip = user.current_login_ip
-            user.current_login_at = datetime.utcnow()
-            user.current_login_ip = client_ip
-            user.login_count = (user.login_count or 0) + 1
-            db.session.commit()
-            
-            # Log the user in
-            login_user(user, remember=True)
-            logger.info(f"User logged in: {user.email}")
-            
-            # Handle JSON vs form requests
-            if request.is_json:
-                return jsonify({'success': True, 'redirect': url_for('admin.dashboard')})
-            else:
-                return redirect(url_for('admin.dashboard'))
-            
-        except Exception as e:
-            logger.error(f"Login error: {e}")
-            error = 'An error occurred during login. Please try again.'
-            return render_template('admin/login.html', error=error), 500
-    
-    @app.route('/logout', methods=['GET', 'POST'])
-    def logout():
-        """Main logout endpoint"""
-        logout_user()
-        return redirect(url_for('login'))
-    
     @app.route('/health')
     def health_check():
         """Main health check endpoint"""
