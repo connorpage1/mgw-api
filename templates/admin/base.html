@@ -103,22 +103,22 @@
                     -->
                     {% endif %}
                     {% if current_user.is_authenticated and current_user.has_role('superadmin') %}
-                    {% if request.endpoint and (request.endpoint.startswith('file.') or request.endpoint == 'file.dashboard') %}
+                    {% if request.endpoint and (request.endpoint.startswith('files.') or request.endpoint == 'files.dashboard') %}
                     <li>
-                        <a href="{{ url_for('file.dashboard') }}" 
-                           class="flex items-center px-4 py-3 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all {% if request.endpoint == 'file.dashboard' %}bg-white bg-opacity-20{% endif %}">
+                        <a href="{{ url_for('files.dashboard') }}" 
+                           class="flex items-center px-4 py-3 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all {% if request.endpoint == 'files.dashboard' %}bg-white bg-opacity-20{% endif %}">
                             <i class="fas fa-layer-group mr-3"></i>Files Dashboard
                         </a>
                     </li>
                     <li>
-                        <a href="{{ url_for('file.list') }}" 
-                           class="flex items-center px-4 py-3 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all {% if request.endpoint and 'files' in request.endpoint and 'dashboard' not in request.endpoint %}bg-white bg-opacity-20{% endif %}">
+                        <a href="{{ url_for('files.list') }}" 
+                           class="flex items-center px-4 py-3 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all {% if request.endpoint and 'files' in request.endpoint and 'list' in request.endpoint %}bg-white bg-opacity-20{% endif %}">
                             <i class="fas fa-file-upload mr-3"></i>Manage Files
                         </a>
                     </li>
                     {% else %}
                     <li>
-                        <a href="{{ url_for('file.dashboard') }}" 
+                        <a href="{{ url_for('files.dashboard') }}" 
                            class="flex items-center px-4 py-3 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all">
                             <i class="fas fa-cloud-upload-alt mr-3"></i>Files
                         </a>
