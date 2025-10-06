@@ -75,18 +75,20 @@
             <nav class="flex-1 p-4">
                 <ul class="space-y-2">
                     <li>
-                        <a href="{{ url_for('admin_main_dashboard') }}" 
-                           class="flex items-center px-4 py-3 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all {% if request.endpoint == 'admin_main_dashboard' %}bg-white bg-opacity-20{% endif %}">
+                        <a href="{{ url_for('admin.dashboard') }}" 
+                           class="flex items-center px-4 py-3 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all {% if request.endpoint == 'admin.dashboard' %}bg-white bg-opacity-20{% endif %}">
                             <i class="fas fa-tachometer-alt mr-3"></i>Dashboard
                         </a>
                     </li>
-                    {% if request.endpoint and (request.endpoint.startswith('admin_glossary_') or request.endpoint == 'admin_glossary_dashboard') %}
+                    <!-- Commented out until glossary routes are implemented
+                    {% if request.endpoint and (request.endpoint.startswith('glossary.') or request.endpoint == 'glossary.dashboard') %}
                     <li>
-                        <a href="{{ url_for('admin_glossary_dashboard') }}" 
-                           class="flex items-center px-4 py-3 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all {% if request.endpoint == 'admin_glossary_dashboard' %}bg-white bg-opacity-20{% endif %}">
+                        <a href="{{ url_for('glossary.dashboard') }}" 
+                           class="flex items-center px-4 py-3 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all {% if request.endpoint == 'glossary.dashboard' %}bg-white bg-opacity-20{% endif %}">
                             <i class="fas fa-layer-group mr-3"></i>Glossary Dashboard
                         </a>
                     </li>
+                    -->
                     <li>
                         <a href="{{ url_for('admin_glossary_terms_list') }}" 
                            class="flex items-center px-4 py-3 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all {% if request.endpoint and 'terms' in request.endpoint %}bg-white bg-opacity-20{% endif %}">
