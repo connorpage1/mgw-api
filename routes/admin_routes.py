@@ -36,18 +36,48 @@ def superadmin_required(f):
 def dashboard():
     """Main admin dashboard"""
     try:
-        # Get basic statistics
-        stats = {
-            'total_terms': Term.query.filter_by(is_active=True).count(),
-            'total_categories': Category.query.filter_by(is_active=True).count(),
-            'total_users': User.query.filter_by(active=True).count(),
-            'total_files': STLFile.query.count()
-        }
+        logger.info("Loading admin dashboard...")
+        
+        # Get basic statistics - test each query individually
+        stats = {}
+        
+        try:
+            stats['total_terms'] = Term.query.filter_by(is_active=True).count()
+            logger.info(f"Total terms: {stats['total_terms']}")
+        except Exception as e:
+            logger.error(f"Error querying terms: {e}")
+            stats['total_terms'] = 0
+            
+        try:
+            stats['total_categories'] = Category.query.filter_by(is_active=True).count()
+            logger.info(f"Total categories: {stats['total_categories']}")
+        except Exception as e:
+            logger.error(f"Error querying categories: {e}")
+            stats['total_categories'] = 0
+            
+        try:
+            stats['total_users'] = User.query.filter_by(active=True).count()
+            logger.info(f"Total users: {stats['total_users']}")
+        except Exception as e:
+            logger.error(f"Error querying users: {e}")
+            stats['total_users'] = 0
+            
+        try:
+            stats['total_files'] = STLFile.query.count()
+            logger.info(f"Total files: {stats['total_files']}")
+        except Exception as e:
+            logger.error(f"Error querying files: {e}")
+            stats['total_files'] = 0
+        
+        logger.info(f"Dashboard stats: {stats}")
+        logger.info("Rendering admin dashboard template...")
         
         return render_template('admin/main_dashboard.html', stats=stats)
         
     except Exception as e:
         logger.error(f"Error loading admin dashboard: {e}")
+        import traceback
+        logger.error(f"Dashboard error traceback: {traceback.format_exc()}")
         flash('Error loading dashboard', 'error')
         return render_template('admin/main_dashboard.html', stats={})
 
