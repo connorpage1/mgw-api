@@ -43,7 +43,8 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # CORS Configuration
-    ALLOWED_ORIGINS = os.environ.get('ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:5555').split(',')
+    default_origins = 'http://localhost:3000,http://localhost:5555,https://pixieview-demo.up.railway.app'
+    ALLOWED_ORIGINS = os.environ.get('ALLOWED_ORIGINS', default_origins).split(',')
     
     # JWT Configuration
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', SECRET_KEY)

@@ -10,6 +10,7 @@ from flask_cors import CORS
 from flask_mail import Mail
 from flask_login import LoginManager, current_user, login_user, logout_user
 from flask_wtf.csrf import CSRFProtect
+from werkzeug.middleware.proxy_fix import ProxyFix
 from datetime import datetime
 import os
 import secrets
@@ -29,6 +30,10 @@ def create_app(config_name=None):
     """Application factory pattern"""
     
     app = Flask(__name__)
+    
+    # Handle HTTPS proxy for Railway deployment
+    if os.environ.get('RAILWAY_ENVIRONMENT_NAME'):
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
     
     # Load configuration
     if config_name is None:
