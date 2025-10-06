@@ -32,7 +32,7 @@ def login():
             # Find user by email
             user = User.query.filter_by(email=username).first()
             
-            if user and user.active and secure_hasher.verify_password(password, user.password_hash):
+            if user and user.active and secure_hasher.verify_password(password, user.password):
                 if user.has_role('admin') or user.has_role('superadmin'):
                     login_user(user)
                     flash(f'Welcome back, {user.display_name}!', 'success')
