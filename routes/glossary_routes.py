@@ -1,8 +1,10 @@
 """
 Public glossary API routes for terms and categories
 """
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, render_template, redirect, url_for, flash
+from flask_login import login_required, current_user
 from sqlalchemy import or_, desc, asc, func
+from functools import wraps
 from models import db, Term, Category
 from utils.logger import logger
 
@@ -171,3 +173,45 @@ def api_search():
     except Exception as e:
         logger.error(f"Error in search: {e}")
         return jsonify({'error': 'Internal server error'}), 500
+
+# === ADMIN GLOSSARY ROUTES ===
+
+def admin_required(f):
+    """Decorator for admin-only routes"""
+    @wraps(f)
+    @login_required
+    def decorated_function(*args, **kwargs):
+        if not current_user.has_role('admin') and not current_user.has_role('superadmin'):
+            flash('Admin access required.', 'error')
+            return redirect(url_for('admin.dashboard'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+@glossary_bp.route('/dashboard')
+@admin_required
+def dashboard():
+    """Glossary admin dashboard (placeholder)"""
+    try:
+        stats = {
+            'total_terms': Term.query.filter_by(is_active=True).count(),
+            'total_categories': Category.query.filter_by(is_active=True).count(),
+            'inactive_terms': Term.query.filter_by(is_active=False).count(),
+            'inactive_categories': Category.query.filter_by(is_active=False).count()
+        }
+        return render_template('admin/glossary_dashboard.html', stats=stats)
+    except Exception as e:
+        logger.error(f"Error loading glossary dashboard: {e}")
+        flash('Error loading glossary dashboard', 'error')
+        return redirect(url_for('admin.dashboard'))
+
+@glossary_bp.route('/terms-list')
+@admin_required  
+def terms_list():
+    """Admin terms list (placeholder)"""
+    try:
+        terms = Term.query.join(Category).order_by(Term.term).all()
+        return render_template('admin/terms_list.html', terms=terms)
+    except Exception as e:
+        logger.error(f"Error loading terms list: {e}")
+        flash('Error loading terms', 'error')
+        return redirect(url_for('glossary.dashboard'))

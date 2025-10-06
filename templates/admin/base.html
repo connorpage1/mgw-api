@@ -80,7 +80,6 @@
                             <i class="fas fa-tachometer-alt mr-3"></i>Dashboard
                         </a>
                     </li>
-                    <!-- Commented out until glossary routes are implemented
                     {% if request.endpoint and (request.endpoint.startswith('glossary.') or request.endpoint == 'glossary.dashboard') %}
                     <li>
                         <a href="{{ url_for('glossary.dashboard') }}" 
@@ -88,37 +87,39 @@
                             <i class="fas fa-layer-group mr-3"></i>Glossary Dashboard
                         </a>
                     </li>
-                    -->
+                    {% endif %}
                     <li>
-                        <a href="{{ url_for('admin_glossary_terms_list') }}" 
+                        <a href="{{ url_for('glossary.terms_list') }}" 
                            class="flex items-center px-4 py-3 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all {% if request.endpoint and 'terms' in request.endpoint %}bg-white bg-opacity-20{% endif %}">
                             <i class="fas fa-book mr-3"></i>Terms
                         </a>
                     </li>
+                    <!-- Categories link commented out until route is implemented
                     <li>
-                        <a href="{{ url_for('admin_glossary_categories_list') }}" 
+                        <a href="{{ url_for('glossary.categories_list') }}" 
                            class="flex items-center px-4 py-3 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all {% if request.endpoint and 'categories' in request.endpoint %}bg-white bg-opacity-20{% endif %}">
                             <i class="fas fa-tags mr-3"></i>Categories
                         </a>
                     </li>
+                    -->
                     {% endif %}
                     {% if current_user.has_role('superadmin') %}
-                    {% if request.endpoint and (request.endpoint.startswith('admin_files_') or request.endpoint == 'admin_files_dashboard') %}
+                    {% if request.endpoint and (request.endpoint.startswith('file.') or request.endpoint == 'file.dashboard') %}
                     <li>
-                        <a href="{{ url_for('admin_files_dashboard') }}" 
-                           class="flex items-center px-4 py-3 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all {% if request.endpoint == 'admin_files_dashboard' %}bg-white bg-opacity-20{% endif %}">
+                        <a href="{{ url_for('file.dashboard') }}" 
+                           class="flex items-center px-4 py-3 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all {% if request.endpoint == 'file.dashboard' %}bg-white bg-opacity-20{% endif %}">
                             <i class="fas fa-layer-group mr-3"></i>Files Dashboard
                         </a>
                     </li>
                     <li>
-                        <a href="{{ url_for('admin_files_list') }}" 
+                        <a href="{{ url_for('file.list') }}" 
                            class="flex items-center px-4 py-3 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all {% if request.endpoint and 'files' in request.endpoint and 'dashboard' not in request.endpoint %}bg-white bg-opacity-20{% endif %}">
                             <i class="fas fa-file-upload mr-3"></i>Manage Files
                         </a>
                     </li>
                     {% else %}
                     <li>
-                        <a href="{{ url_for('admin_files_dashboard') }}" 
+                        <a href="{{ url_for('file.dashboard') }}" 
                            class="flex items-center px-4 py-3 rounded-lg hover:bg-white hover:bg-opacity-10 transition-all">
                             <i class="fas fa-cloud-upload-alt mr-3"></i>Files
                         </a>
@@ -126,7 +127,7 @@
                     {% endif %}
                     {% endif %}
                     <li>
-                        <a href="{{ url_for('admin_account') }}" class="flex items-center px-4 py-2 hover:bg-blue-100">
+                        <a href="{{ url_for('admin.account') }}" class="flex items-center px-4 py-2 hover:bg-blue-100">
                             <i class="fas fa-user-cog mr-3"></i>My Account
                         </a>
                     </li>
@@ -134,7 +135,7 @@
             </nav>
             
             <div class="p-4 border-t border-emerald-400 border-opacity-30">
-                <a href="{{ url_for('admin_logout') }}" class="flex items-center px-4 py-2 text-emerald-200 hover:text-white transition-colors">
+                <a href="{{ url_for('admin.logout') }}" class="flex items-center px-4 py-2 text-emerald-200 hover:text-white transition-colors">
                     <i class="fas fa-sign-out-alt mr-3"></i>Logout
                 </a>
             </div>
@@ -158,8 +159,8 @@
                         </svg>
                     </button>
                     <div class="absolute right-0 z-10 hidden mt-2 w-48 bg-white border rounded shadow-lg group-hover:block" id="profileDropdown">
-                        <a href="{{ url_for('admin_account') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">My Account</a>
-                        <a href="{{ url_for('admin_logout') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">Logout</a>
+                        <a href="{{ url_for('admin.account') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">My Account</a>
+                        <a href="{{ url_for('admin.logout') }}" class="block px-4 py-2 text-gray-700 hover:bg-gray-100">Logout</a>
                     </div>
                 </div>
             </div>

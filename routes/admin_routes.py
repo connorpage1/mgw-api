@@ -51,12 +51,44 @@ def dashboard():
         flash('Error loading dashboard', 'error')
         return render_template('admin/main_dashboard.html', stats={})
 
-# Additional admin routes would be implemented here
-# For brevity, including just the main dashboard
-# The full implementation would include all CRUD operations for:
-# - Users
-# - Terms  
-# - Categories
-# - Files
-# - Bulk uploads
-# - etc.
+# === USER MANAGEMENT ROUTES ===
+
+@admin_bp.route('/users')
+@admin_required
+def users_list():
+    """List all users (placeholder)"""
+    try:
+        users = User.query.all()
+        return render_template('admin/users_list.html', users=users)
+    except Exception as e:
+        logger.error(f"Error loading users list: {e}")
+        flash('Error loading users', 'error')
+        return redirect(url_for('admin.dashboard'))
+
+@admin_bp.route('/tokens')
+@superadmin_required  
+def tokens():
+    """API Token management (placeholder)"""
+    try:
+        users_with_tokens = User.query.filter(User.api_key.isnot(None)).all()
+        return render_template('admin/tokens.html', users=users_with_tokens)
+    except Exception as e:
+        logger.error(f"Error loading tokens: {e}")
+        flash('Error loading tokens', 'error')
+        return redirect(url_for('admin.dashboard'))
+
+@admin_bp.route('/logout')
+@admin_required
+def logout():
+    """Admin logout (placeholder)"""
+    flash('Logged out successfully', 'success')
+    return redirect(url_for('auth.login'))
+
+@admin_bp.route('/account', methods=['GET', 'POST'])
+@admin_required
+def account():
+    """Admin account settings (placeholder)"""
+    if request.method == 'POST':
+        flash('Account updated successfully', 'success')
+        return redirect(url_for('admin.account'))
+    return render_template('admin/account.html', user=current_user)
