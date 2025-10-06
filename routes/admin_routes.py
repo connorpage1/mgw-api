@@ -2,7 +2,7 @@
 Admin interface routes for managing the application
 """
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify
-from flask_login import login_required, current_user
+from flask_login import login_required, current_user, logout_user
 from functools import wraps
 from models import db, User, Category, Term, STLFile
 from utils.logger import logger
@@ -16,7 +16,7 @@ def admin_required(f):
     def decorated_function(*args, **kwargs):
         if not current_user.has_role('admin') and not current_user.has_role('superadmin'):
             flash('Admin access required.', 'error')
-            return redirect(url_for('main.index'))
+            return redirect(url_for('auth.login'))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -78,9 +78,10 @@ def tokens():
         return redirect(url_for('admin.dashboard'))
 
 @admin_bp.route('/logout')
-@admin_required
+@login_required
 def logout():
-    """Admin logout (placeholder)"""
+    """Admin logout"""
+    logout_user()
     flash('Logged out successfully', 'success')
     return redirect(url_for('auth.login'))
 
