@@ -1,10 +1,11 @@
 """
 Authentication routes for login, logout, and JWT management
 """
-from flask import Blueprint, request, jsonify, render_template, redirect, url_for, flash
+from flask import Blueprint, request, jsonify, render_template, redirect, url_for, flash, session, current_app, abort
 from flask_jwt_extended import jwt_required, get_jwt, create_access_token, create_refresh_token, get_jwt_identity
 from flask_login import login_user, logout_user, current_user
 from datetime import datetime, timedelta
+import os
 from models import db, User
 from services.auth_service import secure_hasher, rate_limiter
 from utils.logger import logger
@@ -48,6 +49,34 @@ def login():
             flash('Login failed. Please try again.', 'error')
     
     return render_template('admin/login.html')
+
+@auth_bp.route('/debug-csrf', methods=['GET'])
+def debug_csrf():
+    """Debug route to check CSRF configuration (only in development)"""
+    if not current_app.debug and not os.environ.get('RAILWAY_ENVIRONMENT_NAME'):
+        abort(404)
+    
+    from flask_wtf.csrf import generate_csrf
+    
+    debug_info = {
+        'csrf_token': generate_csrf(),
+        'session_keys': list(session.keys()),
+        'environment': os.environ.get('FLASK_ENV', 'unknown'),
+        'railway_env': os.environ.get('RAILWAY_ENVIRONMENT_NAME'),
+        'csrf_config': {
+            'WTF_CSRF_SSL_STRICT': current_app.config.get('WTF_CSRF_SSL_STRICT'),
+            'WTF_CSRF_TIME_LIMIT': current_app.config.get('WTF_CSRF_TIME_LIMIT'),
+            'SECRET_KEY_SET': bool(current_app.config.get('SECRET_KEY')),
+        },
+        'request_info': {
+            'is_secure': request.is_secure,
+            'scheme': request.scheme,
+            'host': request.host,
+            'referrer': request.referrer,
+        }
+    }
+    
+    return jsonify(debug_info)
 
 @auth_bp.route('/logout', methods=['POST'])
 @jwt_required()

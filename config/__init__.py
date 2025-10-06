@@ -18,7 +18,12 @@ class Config:
     """Base configuration class"""
     
     # Basic Flask Configuration
-    SECRET_KEY = os.environ.get('SECRET_KEY', secrets.token_hex(32))
+    SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
+    
+    # Session Configuration
+    SESSION_COOKIE_SECURE = os.environ.get('RAILWAY_ENVIRONMENT_NAME') is not None  # Only secure in production
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
     
     # Database configuration
     @staticmethod

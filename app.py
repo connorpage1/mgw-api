@@ -61,6 +61,13 @@ def create_app(config_name=None):
     # CSRF Protection Configuration
     csrf = CSRFProtect(app)
     
+    # Configure CSRF for Railway deployment
+    if os.environ.get('RAILWAY_ENVIRONMENT_NAME'):
+        app.config['WTF_CSRF_SSL_STRICT'] = False  # Railway handles SSL termination
+        app.config['WTF_CSRF_TIME_LIMIT'] = 3600   # 1 hour token lifetime
+        # Allow Railway's domain for referrer checks
+        app.config['WTF_CSRF_EXEMPT_LIST'] = []
+    
     # Flask-Login Configuration
     login_manager = LoginManager()
     login_manager.init_app(app)
@@ -100,8 +107,23 @@ def create_app(config_name=None):
     @app.errorhandler(400)
     def handle_bad_request(e):
         """Handle 400 Bad Request errors"""
+        # Enhanced CSRF error handling
+        error_description = str(e)
+        is_csrf_error = 'CSRF' in error_description or 'csrf' in error_description.lower()
+        
         if request.path.startswith('/api/'):
-            return jsonify({'error': 'Bad Request', 'message': str(e)}), 400
+            return jsonify({
+                'error': 'Bad Request', 
+                'message': error_description,
+                'csrf_error': is_csrf_error
+            }), 400
+        
+        # For web forms, provide more helpful error info in development
+        if app.debug and is_csrf_error:
+            logger.warning(f"CSRF Error: {error_description} for {request.path}")
+            logger.warning(f"Request headers: {dict(request.headers)}")
+            logger.warning(f"Form data: {request.form}")
+        
         return render_template('admin/400.html'), 400
     
     @app.errorhandler(404)
