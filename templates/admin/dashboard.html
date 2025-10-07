@@ -79,7 +79,7 @@
             {% endfor %}
         </div>
     {% else %}
-        <p class="text-gray-500">No terms yet. <a href="{{ url_for('admin_glossary_term_new') }}" class="text-purple-600 hover:text-purple-800">Create your first term</a>.</p>
+        <p class="text-gray-500">No terms yet. <a href="{{ url_for('admin.new_term') }}" class="text-purple-600 hover:text-purple-800">Create your first term</a>.</p>
     {% endif %}
 </div>
 {% endblock %}

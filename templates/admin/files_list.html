@@ -92,15 +92,15 @@
                             {% endif %}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                            <a href="{{ url_for('admin_view_stl_file', file_id=file.id) }}" 
+                            <a href="{{ url_for('files.stl_detail', file_id=file.id) }}" 
                                class="text-indigo-600 hover:text-indigo-900">View</a>
                             {% if not file.is_featured %}
-                            <form method="POST" action="{{ url_for('admin_set_featured_file', file_id=file.id) }}" class="inline">
+                            <form method="POST" action="{{ url_for('files.feature_stl', file_id=file.id) }}" class="inline">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                                 <button type="submit" class="text-green-600 hover:text-green-900">Feature</button>
                             </form>
                             {% endif %}
-                            <form method="POST" action="{{ url_for('admin_delete_stl_file', file_id=file.id) }}" 
+                            <form method="POST" action="{{ url_for('files.delete_stl', file_id=file.id) }}" 
                                   class="inline"
                                   data-confirm='{"title": "Delete STL File", "message": "Are you sure you want to delete {{ file.original_filename }}? This action cannot be undone.", "action": "Delete"}'>
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -159,7 +159,7 @@
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                             {% if file.stl_file %}
-                            <a href="{{ url_for('admin_view_stl_file', file_id=file.associated_stl_id) }}" 
+                            <a href="{{ url_for('files.stl_detail', file_id=file.associated_stl_id) }}" 
                                class="text-purple-600 hover:text-purple-900">{{ file.stl_file.original_filename[:20] }}{% if file.stl_file.original_filename|length > 20 %}...{% endif %}</a>
                             {% else %}
                             None
@@ -169,9 +169,9 @@
                             {{ file.upload_timestamp.strftime('%Y-%m-%d %H:%M') }}
                         </td>
                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                            <a href="{{ url_for('admin_view_video_file', file_id=file.id) }}" 
+                            <a href="{{ url_for('files.video_detail', file_id=file.id) }}" 
                                class="text-indigo-600 hover:text-indigo-900">View</a>
-                            <form method="POST" action="{{ url_for('admin_delete_video_file', file_id=file.id) }}" 
+                            <form method="POST" action="{{ url_for('files.delete_video', file_id=file.id) }}" 
                                   class="inline"
                                   data-confirm='{"title": "Delete Video File", "message": "Are you sure you want to delete {{ file.original_filename }}? This action cannot be undone.", "action": "Delete"}'>
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
@@ -201,7 +201,7 @@
 <div id="stlUploadModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
     <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
         <h3 class="text-lg font-semibold text-gray-900 mb-4">Upload STL File</h3>
-        <form action="{{ url_for('upload_stl') }}" method="post" enctype="multipart/form-data">
+        <form action="{{ url_for('files.upload_stl') }}" method="post" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 mb-2">STL File</label>
@@ -247,7 +247,7 @@
 <div id="videoUploadModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
     <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
         <h3 class="text-lg font-semibold text-gray-900 mb-4">Upload Video File</h3>
-        <form action="{{ url_for('upload_video') }}" method="post" enctype="multipart/form-data">
+        <form action="{{ url_for('files.upload_video') }}" method="post" enctype="multipart/form-data">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 mb-2">Video File</label>

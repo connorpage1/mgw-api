@@ -8,9 +8,9 @@
     <div class="flex items-center justify-between mb-6">
         <div>
             <nav class="text-sm text-gray-500 mb-2">
-                <a href="{{ url_for('admin_files_dashboard') }}" class="hover:text-gray-700">Files</a>
+                <a href="{{ url_for('files.dashboard') }}" class="hover:text-gray-700">Files</a>
                 <span class="mx-2">/</span>
-                <a href="{{ url_for('admin_files_list') }}" class="hover:text-gray-700">Manage Files</a>
+                <a href="{{ url_for('files.files_list') }}" class="hover:text-gray-700">Manage Files</a>
                 <span class="mx-2">/</span>
                 <span class="text-gray-900">{{ stl_file.original_filename }}</span>
             </nav>
@@ -24,14 +24,14 @@
         </div>
         <div class="flex space-x-3">
             {% if not stl_file.is_featured %}
-            <form method="POST" action="{{ url_for('admin_set_featured_file', file_id=stl_file.id) }}" class="inline">
+            <form method="POST" action="{{ url_for('files.feature_stl', file_id=stl_file.id) }}" class="inline">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition-colors">
                     <i class="fas fa-star mr-2"></i>Feature File
                 </button>
             </form>
             {% endif %}
-            <form method="POST" action="{{ url_for('admin_delete_stl_file', file_id=stl_file.id) }}"
+            <form method="POST" action="{{ url_for('files.delete_stl', file_id=stl_file.id) }}"
                   data-confirm='{"title": "Delete STL File", "message": "Are you sure you want to delete {{ stl_file.original_filename }}? This action cannot be undone.", "action": "Delete"}'>
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <button type="submit" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition-colors">
@@ -182,7 +182,7 @@
                                 <div class="text-sm text-gray-500">{{ (stl_file.parent_file.file_size / 1024 / 1024) | round(2) }} MB</div>
                             </div>
                         </div>
-                        <a href="{{ url_for('admin_view_stl_file', file_id=stl_file.parent_file.id) }}" 
+                        <a href="{{ url_for('files.stl_detail', file_id=stl_file.parent_file.id) }}" 
                            class="text-green-600 hover:text-green-800 text-sm font-medium">View →</a>
                     </div>
                 </div>
@@ -203,7 +203,7 @@
                                     <div class="text-sm text-gray-500">{{ (child.file_size / 1024 / 1024) | round(2) }} MB</div>
                                 </div>
                             </div>
-                            <a href="{{ url_for('admin_view_stl_file', file_id=child.id) }}" 
+                            <a href="{{ url_for('files.stl_detail', file_id=child.id) }}" 
                                class="text-blue-600 hover:text-blue-800 text-sm font-medium">View →</a>
                         </div>
                     </div>
@@ -233,7 +233,7 @@
                     {% if video.description %}
                     <p class="text-sm text-gray-600 mb-3">{{ video.description[:100] }}{% if video.description|length > 100 %}...{% endif %}</p>
                     {% endif %}
-                    <a href="{{ url_for('admin_view_video_file', file_id=video.id) }}" 
+                    <a href="{{ url_for('files.video_detail', file_id=video.id) }}" 
                        class="text-blue-600 hover:text-blue-800 text-sm font-medium">View Video →</a>
                 </div>
                 {% endfor %}

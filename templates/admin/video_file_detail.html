@@ -8,9 +8,9 @@
     <div class="flex items-center justify-between mb-6">
         <div>
             <nav class="text-sm text-gray-500 mb-2">
-                <a href="{{ url_for('admin_files_dashboard') }}" class="hover:text-gray-700">Files</a>
+                <a href="{{ url_for('files.dashboard') }}" class="hover:text-gray-700">Files</a>
                 <span class="mx-2">/</span>
-                <a href="{{ url_for('admin_files_list') }}" class="hover:text-gray-700">Manage Files</a>
+                <a href="{{ url_for('files.files_list') }}" class="hover:text-gray-700">Manage Files</a>
                 <span class="mx-2">/</span>
                 <span class="text-gray-900">{{ video_file.original_filename }}</span>
             </nav>
@@ -20,7 +20,7 @@
             </h1>
         </div>
         <div class="flex space-x-3">
-            <form method="POST" action="{{ url_for('admin_delete_video_file', file_id=video_file.id) }}"
+            <form method="POST" action="{{ url_for('files.delete_video', file_id=video_file.id) }}"
                   data-confirm='{"title": "Delete Video File", "message": "Are you sure you want to delete {{ video_file.original_filename }}? This action cannot be undone.", "action": "Delete"}'>
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <button type="submit" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition-colors">
@@ -114,7 +114,7 @@
                         {% endif %}
                     </div>
                 </div>
-                <a href="{{ url_for('admin_view_stl_file', file_id=video_file.associated_stl_id) }}" 
+                <a href="{{ url_for('files.stl_detail', file_id=video_file.associated_stl_id) }}" 
                    class="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition-colors">
                     View STL File
                 </a>

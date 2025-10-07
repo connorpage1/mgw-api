@@ -6,7 +6,7 @@
 {% block content %}
 <div class="max-w-3xl mx-auto bg-white rounded-lg shadow-md p-8">
     <h2 class="text-2xl font-bold mb-6">Users</h2>
-    <a href="{{ url_for('admin_user_new') }}" class="mb-4 inline-block btn-primary text-white px-6 py-2 rounded-lg font-semibold hover:shadow-lg transition-all">Add New User</a>
+    <a href="{{ url_for('admin.new_user') }}" class="mb-4 inline-block btn-primary text-white px-6 py-2 rounded-lg font-semibold hover:shadow-lg transition-all">Add New User</a>
     <table class="w-full mt-4">
         <thead>
             <tr>
@@ -25,10 +25,10 @@
                     {% endfor %}
                 </td>
                 <td class="py-2">
-                    <a href="{{ url_for('admin_user_edit', user_id=user.id) }}" class="text-emerald-600 hover:text-emerald-900">Edit</a>
-                    <a href="{{ url_for('admin_user_reset_password', user_id=user.id) }}" class="ml-2 text-teal-600 hover:text-teal-900">Reset Password</a>
+                    <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" class="text-emerald-600 hover:text-emerald-900">Edit</a>
+                    <a href="{{ url_for('admin.reset_user_password', user_id=user.id) }}" class="ml-2 text-teal-600 hover:text-teal-900">Reset Password</a>
                     {% if user.id != current_user.id %}
-                    <a href="{{ url_for('admin_user_delete_confirm', user_id=user.id) }}" class="ml-2 text-red-600 hover:text-red-900">Delete</a>
+                    <a href="{{ url_for('admin.confirm_delete_user', user_id=user.id) }}" class="ml-2 text-red-600 hover:text-red-900">Delete</a>
                     {% endif %}
                 </td>
             </tr>
