@@ -7,7 +7,7 @@ from functools import wraps
 from datetime import datetime
 import re
 import json
-from models import db, User, Category, Term, STLFile, Role
+from models import db, User, Category, Term, STLFile, VideoFile, Role
 from utils.logger import logger
 
 admin_bp = Blueprint('admin', __name__)
@@ -67,10 +67,17 @@ def dashboard():
             
         try:
             stats['total_files'] = STLFile.query.count()
-            logger.info(f"Total files: {stats['total_files']}")
+            logger.info(f"Total STL files: {stats['total_files']}")
         except Exception as e:
-            logger.error(f"Error querying files: {e}")
+            logger.error(f"Error querying STL files: {e}")
             stats['total_files'] = 0
+            
+        try:
+            stats['total_video_files'] = VideoFile.query.count()
+            logger.info(f"Total video files: {stats['total_video_files']}")
+        except Exception as e:
+            logger.error(f"Error querying video files: {e}")
+            stats['total_video_files'] = 0
         
         logger.info(f"Dashboard stats: {stats}")
         logger.info("Rendering admin dashboard template...")

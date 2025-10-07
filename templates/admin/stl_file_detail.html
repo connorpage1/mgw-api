@@ -344,11 +344,21 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     function loadAvailableParents() {
-        fetch(`/admin/files/stl/available-parents/${fileId}`, {
+        console.log('Loading available parents for file:', fileId); // Debug log
+        
+        fetch(`{{ url_for('files.get_available_parents', file_id='FILEID') }}`.replace('FILEID', fileId), {
             credentials: 'same-origin'
         })
-            .then(response => response.json())
+            .then(response => {
+                console.log('Response status:', response.status); // Debug log
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
             .then(data => {
+                console.log('Available parents response:', data); // Debug log
+                
                 if (data.parents) {
                     // Clear existing options (except the first one)
                     while (parentFileSelect.children.length > 1) {
@@ -368,13 +378,19 @@ document.addEventListener('DOMContentLoaded', function() {
                         
                         parentFileSelect.appendChild(option);
                     });
+                    
+                    console.log(`Added ${data.parents.length} parent options to dropdown`); // Debug log
+                } else if (data.error) {
+                    console.error('Server error loading available parents:', data.error);
+                    showMessage(`Error: ${data.error}`, 'error');
                 } else {
-                    console.error('Failed to load available parents:', data.error);
+                    console.error('Unexpected response format:', data);
+                    showMessage('Unexpected response format from server', 'error');
                 }
             })
             .catch(error => {
                 console.error('Error loading available parents:', error);
-                showMessage('Failed to load available parent files', 'error');
+                showMessage(`Failed to load available parent files: ${error.message}`, 'error');
             });
     }
 
@@ -390,7 +406,7 @@ document.addEventListener('DOMContentLoaded', function() {
         submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Updating...';
         submitButton.disabled = true;
 
-        fetch(`/admin/files/stl/${fileId}/relationships`, {
+        fetch(`{{ url_for('files.update_stl_relationships', file_id='FILEID') }}`.replace('FILEID', fileId), {
             method: 'POST',
             body: formData,
             credentials: 'same-origin'

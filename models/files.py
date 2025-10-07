@@ -14,6 +14,7 @@ class STLFile(db.Model):
     s3_key = db.Column(db.String(255), nullable=True)  # For S3 storage
     local_path = db.Column(db.String(255), nullable=True)  # For local storage
     file_size = db.Column(db.Integer, nullable=False)
+    file_hash = db.Column(db.String(64), nullable=True)  # SHA-256 hash of file content
     upload_timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     last_viewed = db.Column(db.DateTime)
     view_count = db.Column(db.Integer, default=0)

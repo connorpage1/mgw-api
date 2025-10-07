@@ -139,10 +139,26 @@
                 <textarea name="description" rows="3" 
                           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"></textarea>
             </div>
-            <div class="mb-6">
+            <div class="mb-4">
                 <label class="block text-sm font-medium text-gray-700 mb-2">Tags (Optional)</label>
                 <input type="text" name="tags" placeholder="tag1, tag2, tag3" 
                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500">
+            </div>
+            <div class="mb-4">
+                <label class="flex items-center">
+                    <input type="checkbox" name="is_partial" value="true" id="dashboard_is_partial_checkbox" class="mr-2">
+                    <span class="text-sm font-medium text-gray-700">This is a partial/split file</span>
+                </label>
+            </div>
+            <div class="mb-6" id="dashboard_parent_file_section" style="display: none;">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Parent File (Optional)</label>
+                <select name="parent_file_id" id="dashboard_parent_file_select" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    <option value="">None - This is a full file</option>
+                    {% for stl_file in stl_files if not stl_file.is_partial %}
+                    <option value="{{ stl_file.id }}">{{ stl_file.original_filename }}</option>
+                    {% endfor %}
+                </select>
+                <p class="text-xs text-gray-500 mt-1">Select the full file that this partial file was cut from</p>
             </div>
             <div class="flex justify-end space-x-3">
                 <button type="button" onclick="document.getElementById('stlUploadModal').classList.add('hidden')" 
@@ -206,6 +222,24 @@ document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         document.getElementById('stlUploadModal').classList.add('hidden');
         document.getElementById('videoUploadModal').classList.add('hidden');
+    }
+});
+
+// Handle partial file checkbox for dashboard upload modal
+document.addEventListener('DOMContentLoaded', function() {
+    const dashboardPartialCheckbox = document.getElementById('dashboard_is_partial_checkbox');
+    const dashboardParentSection = document.getElementById('dashboard_parent_file_section');
+    const dashboardParentSelect = document.getElementById('dashboard_parent_file_select');
+    
+    if (dashboardPartialCheckbox && dashboardParentSection && dashboardParentSelect) {
+        dashboardPartialCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                dashboardParentSection.style.display = 'block';
+            } else {
+                dashboardParentSection.style.display = 'none';
+                dashboardParentSelect.value = ''; // Clear selection when hiding
+            }
+        });
     }
 });
 </script>
