@@ -1,0 +1,136 @@
+{% extends "admin/base.html" %}
+
+{% block page_title %}App Management{% endblock %}
+{% block header_title %}App Management{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto bg-white rounded-lg shadow-md p-8">
+    
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold">Application Management</h2>
+        <div class="flex gap-3">
+            <a href="{{ url_for('admin.tokens') }}" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg font-semibold">
+                🔑 View Tokens
+            </a>
+            <a href="{{ url_for('admin.new_app') }}" class="btn-primary text-white px-4 py-2 rounded-lg font-semibold">
+                ➕ Create New App
+            </a>
+        </div>
+    </div>
+
+    <!-- App Status Overview -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div class="bg-green-50 p-4 rounded-lg border border-green-200">
+            <h3 class="text-lg font-semibold text-green-800">Active Apps</h3>
+            <p class="text-3xl font-bold text-green-600">{{ apps|selectattr('active')|list|length }}</p>
+            <p class="text-sm text-green-600">Ready for API Access</p>
+        </div>
+        <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <h3 class="text-lg font-semibold text-blue-800">Total Apps</h3>
+            <p class="text-3xl font-bold text-blue-600">{{ apps|length }}</p>
+            <p class="text-sm text-blue-600">All Applications</p>
+        </div>
+        <div class="bg-purple-50 p-4 rounded-lg border border-purple-200">
+            <h3 class="text-lg font-semibold text-purple-800">Total Tokens</h3>
+            <p class="text-3xl font-bold text-purple-600">
+                {% set total_tokens = 0 %}
+                {% for app in apps %}
+                    {% set total_tokens = total_tokens + app.tokens.count() %}
+                {% endfor %}
+                {{ total_tokens }}
+            </p>
+            <p class="text-sm text-purple-600">Across All Apps</p>
+        </div>
+    </div>
+
+    <!-- Apps Table -->
+    <div class="mb-8">
+        <h3 class="text-xl font-semibold mb-4">Applications</h3>
+        {% if apps %}
+        <div class="overflow-x-auto">
+            <table class="w-full border border-gray-300">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-2 text-left">App Name</th>
+                        <th class="px-4 py-2 text-left">Description</th>
+                        <th class="px-4 py-2 text-left">Status</th>
+                        <th class="px-4 py-2 text-left">Active Tokens</th>
+                        <th class="px-4 py-2 text-left">Created</th>
+                        <th class="px-4 py-2 text-left">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for app in apps %}
+                    <tr class="border-t {% if not app.active %}bg-gray-50{% endif %}">
+                        <td class="px-4 py-2 font-semibold {% if not app.active %}line-through text-gray-500{% endif %}">
+                            {{ app.name }}
+                        </td>
+                        <td class="px-4 py-2 text-sm text-gray-600">
+                            {{ app.description or 'No description' }}
+                        </td>
+                        <td class="px-4 py-2">
+                            {% if app.active %}
+                                <span class="text-green-600 font-semibold">Active</span>
+                            {% else %}
+                                <span class="text-red-600 font-semibold">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-2">
+                            <div class="flex items-center gap-2">
+                                <span class="font-mono">{{ app.tokens.filter_by(active=True).count() }}</span>
+                                {% if app.active %}
+                                <a href="{{ url_for('admin.new_token', app_id=app.id) }}" 
+                                   class="text-blue-600 hover:text-blue-800 text-xs">+ Add</a>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="px-4 py-2 text-sm">
+                            {{ app.created_at|strftime('%Y-%m-%d') }}
+                        </td>
+                        <td class="px-4 py-2">
+                            <div class="flex gap-2">
+                                <a href="{{ url_for('admin.edit_app', app_id=app.id) }}" 
+                                   class="text-blue-600 hover:text-blue-900 text-sm">Edit</a>
+                                {% if app.active %}
+                                    {% if app.tokens.filter_by(active=True).count() == 0 %}
+                                    <form method="POST" action="{{ url_for('admin.delete_app', app_id=app.id) }}" style="display: inline;">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                                        <button type="submit" onclick="return confirm('Delete this app? This cannot be undone.')"
+                                                class="text-red-600 hover:text-red-900 text-sm">Delete</button>
+                                    </form>
+                                    {% else %}
+                                    <span class="text-gray-400 text-sm" title="Revoke all tokens first">Delete</span>
+                                    {% endif %}
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-8 text-gray-500">
+            <p class="text-lg mb-4">No applications found</p>
+            <p class="mb-4">Create your first app to start using the API.</p>
+            <a href="{{ url_for('admin.new_app') }}" class="btn-primary text-white px-4 py-2 rounded-lg">
+                Create Your First App
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Instructions -->
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-6">
+        <h3 class="text-lg font-semibold text-blue-800 mb-3">📚 About Applications</h3>
+        <div class="text-sm text-blue-700 space-y-2">
+            <p><strong>Applications</strong> represent different systems or services that need API access.</p>
+            <p><strong>Each app can have multiple API tokens</strong> for different purposes (production, staging, etc.).</p>
+            <p><strong>Deactivating an app</strong> will disable all its tokens without deleting them.</p>
+            <p><strong>Apps with active tokens</strong> cannot be deleted - revoke all tokens first.</p>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

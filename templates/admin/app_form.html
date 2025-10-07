@@ -1,0 +1,118 @@
+{% extends "admin/base.html" %}
+
+{% block page_title %}{{ 'Edit App' if app else 'Create New App' }}{% endblock %}
+{% block header_title %}{{ 'Edit Application' if app else 'Create New Application' }}{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto bg-white rounded-lg shadow-md p-8">
+    
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold">{{ 'Edit Application' if app else 'Create New Application' }}</h2>
+        <a href="{{ url_for('admin.apps_list') }}" class="text-gray-600 hover:text-gray-900">
+            ← Back to Apps
+        </a>
+    </div>
+
+    <!-- Form -->
+    <form method="POST" class="space-y-6">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        
+        <!-- App Name -->
+        <div>
+            <label for="name" class="block text-sm font-medium text-gray-700 mb-2">
+                Application Name *
+            </label>
+            <input type="text" 
+                   id="name" 
+                   name="name" 
+                   value="{{ app.name if app else '' }}"
+                   required 
+                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                   placeholder="e.g., Mobile App, Analytics Dashboard, External Integration">
+            <p class="text-xs text-gray-500 mt-1">A descriptive name for the application that will use the API</p>
+        </div>
+
+        <!-- Description -->
+        <div>
+            <label for="description" class="block text-sm font-medium text-gray-700 mb-2">
+                Description
+            </label>
+            <textarea id="description" 
+                      name="description" 
+                      rows="3"
+                      class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="Describe what this application does and how it uses the API">{{ app.description if app else '' }}</textarea>
+            <p class="text-xs text-gray-500 mt-1">Optional description to help identify the app's purpose</p>
+        </div>
+
+        <!-- Active Status (only for edit) -->
+        {% if app %}
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+                Status
+            </label>
+            <div class="flex items-center">
+                <input type="checkbox" 
+                       id="active" 
+                       name="active" 
+                       {{ 'checked' if app.active else '' }}
+                       class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
+                <label for="active" class="ml-2 text-sm text-gray-700">
+                    Active (allow API access for this app)
+                </label>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">
+                Deactivating an app will disable all its tokens without deleting them
+            </p>
+        </div>
+        {% endif %}
+
+        <!-- Current Token Count (for edit) -->
+        {% if app %}
+        <div class="bg-gray-50 p-4 rounded-lg">
+            <h3 class="text-sm font-medium text-gray-700 mb-2">Current Tokens</h3>
+            <div class="flex items-center justify-between">
+                <span class="text-sm text-gray-600">
+                    Active tokens: <strong>{{ app.tokens.filter_by(active=True).count() }}</strong>
+                </span>
+                <span class="text-sm text-gray-600">
+                    Total tokens: <strong>{{ app.tokens.count() }}</strong>
+                </span>
+            </div>
+            {% if app.tokens.filter_by(active=True).count() > 0 %}
+            <p class="text-xs text-orange-600 mt-2">
+                ⚠️ This app has active tokens. Deactivating it will disable API access.
+            </p>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Form Actions -->
+        <div class="flex justify-end gap-3 pt-6 border-t">
+            <a href="{{ url_for('admin.apps_list') }}" 
+               class="px-4 py-2 text-gray-600 hover:text-gray-900 border border-gray-300 rounded-md">
+                Cancel
+            </a>
+            <button type="submit" 
+                    class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-semibold">
+                {{ 'Update App' if app else 'Create App' }}
+            </button>
+        </div>
+    </form>
+
+    <!-- Next Steps (for new apps) -->
+    {% if not app %}
+    <div class="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-6">
+        <h3 class="text-lg font-semibold text-blue-800 mb-3">📋 Next Steps</h3>
+        <div class="text-sm text-blue-700 space-y-2">
+            <p><strong>1. Create the app</strong> using the form above</p>
+            <p><strong>2. Generate API tokens</strong> for the app with descriptive names</p>
+            <p><strong>3. Use the tokens</strong> in your applications to access the API</p>
+            <p><strong>4. Monitor usage</strong> and manage tokens as needed</p>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

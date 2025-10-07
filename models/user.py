@@ -30,8 +30,6 @@ class User(UserMixin, db.Model):
     last_login_ip = db.Column(db.String(45))
     login_count = db.Column(db.Integer, default=0)
     
-    # API Access
-    api_key = db.Column(db.String(255), unique=True, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # Relationships

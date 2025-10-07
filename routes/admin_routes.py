@@ -7,7 +7,7 @@ from functools import wraps
 from datetime import datetime
 import re
 import json
-from models import db, User, Category, Term, STLFile, VideoFile, Role
+from models import db, User, Category, Term, STLFile, VideoFile, Role, App, AppToken
 from utils.logger import logger
 
 admin_bp = Blueprint('admin', __name__)
@@ -78,6 +78,20 @@ def dashboard():
         except Exception as e:
             logger.error(f"Error querying video files: {e}")
             stats['total_video_files'] = 0
+            
+        try:
+            stats['total_apps'] = App.query.filter_by(active=True).count()
+            logger.info(f"Total apps: {stats['total_apps']}")
+        except Exception as e:
+            logger.error(f"Error querying apps: {e}")
+            stats['total_apps'] = 0
+            
+        try:
+            stats['total_tokens'] = AppToken.query.filter_by(active=True).count()
+            logger.info(f"Total active tokens: {stats['total_tokens']}")
+        except Exception as e:
+            logger.error(f"Error querying tokens: {e}")
+            stats['total_tokens'] = 0
         
         logger.info(f"Dashboard stats: {stats}")
         logger.info("Rendering admin dashboard template...")
@@ -98,20 +112,32 @@ def dashboard():
 def users_list():
     """List all users (placeholder)"""
     try:
-        users = User.query.all()
+        users = User.query.filter_by(active=True).all()
         return render_template('admin/users_list.html', users=users)
     except Exception as e:
         logger.error(f"Error loading users list: {e}")
         flash('Error loading users', 'error')
         return redirect(url_for('admin.dashboard'))
 
+@admin_bp.route('/apps')
+@superadmin_required  
+def apps_list():
+    """App management"""
+    try:
+        apps = App.query.order_by(App.created_at.desc()).all()
+        return render_template('admin/apps_list.html', apps=apps)
+    except Exception as e:
+        logger.error(f"Error loading apps: {e}")
+        flash('Error loading apps', 'error')
+        return redirect(url_for('admin.dashboard'))
+
 @admin_bp.route('/tokens')
 @superadmin_required  
 def tokens():
-    """API Token management (placeholder)"""
+    """API Token management"""
     try:
-        users_with_tokens = User.query.filter(User.api_key.isnot(None)).all()
-        return render_template('admin/tokens.html', users=users_with_tokens)
+        tokens = AppToken.query.join(App).order_by(AppToken.created_at.desc()).all()
+        return render_template('admin/tokens.html', tokens=tokens)
     except Exception as e:
         logger.error(f"Error loading tokens: {e}")
         flash('Error loading tokens', 'error')
@@ -158,8 +184,57 @@ def glossary_dashboard():
 def glossary_terms():
     """Admin terms list"""
     try:
-        terms = Term.query.join(Category).order_by(Term.term).all()
-        return render_template('admin/terms_list.html', terms=terms)
+        # Get query parameters
+        page = request.args.get('page', 1, type=int)
+        search = request.args.get('search', '')
+        category_id = request.args.get('category', type=int)
+        show_inactive = request.args.get('show_inactive', 0, type=int)
+        sort = request.args.get('sort', 'term')
+        order = request.args.get('order', 'asc')
+        
+        # Build query
+        query = Term.query.join(Category)
+        
+        # Filter by search
+        if search:
+            query = query.filter(Term.term.ilike(f'%{search}%'))
+        
+        # Filter by category
+        if category_id:
+            query = query.filter(Term.category_id == category_id)
+        
+        # Filter by active status
+        if not show_inactive:
+            query = query.filter(Term.is_active == True)
+        
+        # Apply sorting
+        if sort == 'term':
+            query = query.order_by(Term.term.desc() if order == 'desc' else Term.term.asc())
+        elif sort == 'category':
+            query = query.order_by(Category.name.desc() if order == 'desc' else Category.name.asc())
+        elif sort == 'difficulty':
+            query = query.order_by(Term.difficulty.desc() if order == 'desc' else Term.difficulty.asc())
+        elif sort == 'views':
+            query = query.order_by(Term.view_count.desc() if order == 'desc' else Term.view_count.asc())
+        elif sort == 'status':
+            query = query.order_by(Term.is_active.desc() if order == 'desc' else Term.is_active.asc())
+        else:
+            query = query.order_by(Term.term.asc())
+        
+        # Paginate
+        terms = query.paginate(page=page, per_page=20, error_out=False)
+        
+        # Get categories for filter dropdown
+        categories = Category.query.filter_by(is_active=True).order_by(Category.name).all()
+        
+        return render_template('admin/terms_list.html', 
+                             terms=terms, 
+                             categories=categories,
+                             search=search,
+                             category_id=category_id,
+                             show_inactive=show_inactive,
+                             sort=sort,
+                             order=order)
     except Exception as e:
         logger.error(f"Error loading terms list: {e}")
         flash('Error loading terms', 'error')
@@ -176,13 +251,16 @@ def new_term():
     try:
         # Handle POST request - create new term
         term_text = request.form.get('term', '').strip()
+        pronunciation = request.form.get('pronunciation', '').strip()
         definition = request.form.get('definition', '').strip()
         category_id = request.form.get('category_id')
         difficulty = request.form.get('difficulty', 'tourist')
         etymology = request.form.get('etymology', '').strip()
+        example = request.form.get('example', '').strip()
+        is_featured = request.form.get('is_featured') == 'on'
         
-        if not term_text or not definition or not category_id:
-            flash('Term, definition, and category are required', 'error')
+        if not term_text or not pronunciation or not definition or not category_id:
+            flash('Term, pronunciation, definition, and category are required', 'error')
             categories = Category.query.filter_by(is_active=True).order_by(Category.name).all()
             return render_template('admin/term_form.html', categories=categories, term=None)
         
@@ -204,12 +282,13 @@ def new_term():
         new_term = Term(
             term=term_text,
             slug=slug,
+            pronunciation=pronunciation,
             definition=definition,
             category_id=int(category_id),
             difficulty=difficulty,
             etymology=etymology if etymology else None,
-            created_by=current_user.id,
-            updated_by=current_user.id
+            example=example if example else None,
+            is_featured=is_featured
         )
         
         db.session.add(new_term)
@@ -330,6 +409,7 @@ def new_category():
         name = request.form.get('name', '').strip()
         description = request.form.get('description', '').strip()
         sort_order = request.form.get('sort_order', 0, type=int)
+        is_active = '1' in request.form.getlist('is_active')
         
         if not name:
             flash('Category name is required', 'error')
@@ -354,8 +434,7 @@ def new_category():
             slug=slug,
             description=description if description else None,
             sort_order=sort_order,
-            created_by=current_user.id,
-            updated_by=current_user.id
+            is_active=is_active
         )
         
         db.session.add(new_category)
@@ -384,6 +463,7 @@ def edit_category(category_id):
         name = request.form.get('name', '').strip()
         description = request.form.get('description', '').strip()
         sort_order = request.form.get('sort_order', 0, type=int)
+        is_active = '1' in request.form.getlist('is_active')
         
         if not name:
             flash('Category name is required', 'error')
@@ -408,8 +488,7 @@ def edit_category(category_id):
         category.slug = slug
         category.description = description if description else None
         category.sort_order = sort_order
-        category.updated_by = current_user.id
-        category.updated_at = datetime.utcnow()
+        category.is_active = is_active
         
         db.session.commit()
         
@@ -436,8 +515,6 @@ def delete_category(category_id):
             return redirect(url_for('admin.glossary_categories'))
         
         category.is_active = False
-        category.updated_by = current_user.id
-        category.updated_at = datetime.utcnow()
         
         db.session.commit()
         
@@ -457,8 +534,6 @@ def restore_category(category_id):
     try:
         category = Category.query.get_or_404(category_id)
         category.is_active = True
-        category.updated_by = current_user.id
-        category.updated_at = datetime.utcnow()
         
         db.session.commit()
         
@@ -512,9 +587,7 @@ def bulk_upload():
                     
                     category = Category(
                         name=term_data['category'],
-                        slug=category_slug,
-                        created_by=current_user.id,
-                        updated_by=current_user.id
+                        slug=category_slug
                     )
                     db.session.add(category)
                     db.session.flush()  # Get category ID
@@ -536,12 +609,11 @@ def bulk_upload():
                 new_term = Term(
                     term=term_data['term'],
                     slug=term_slug,
+                    pronunciation=term_data.get('pronunciation', term_data['term']),
                     definition=term_data['definition'],
                     category_id=category.id,
                     difficulty=term_data.get('difficulty', 'tourist'),
-                    etymology=term_data.get('etymology'),
-                    created_by=current_user.id,
-                    updated_by=current_user.id
+                    etymology=term_data.get('etymology')
                 )
                 
                 db.session.add(new_term)
@@ -777,81 +849,221 @@ def reset_user_password(user_id):
         flash('Error resetting password', 'error')
         return render_template('admin/user_form.html', user=user, password_reset=True)
 
+# === APP MANAGEMENT ===
+
+@admin_bp.route('/apps/new', methods=['GET', 'POST'])
+@superadmin_required
+def new_app():
+    """Create new app"""
+    if request.method == 'GET':
+        return render_template('admin/app_form.html', app=None)
+    
+    try:
+        # Handle POST request - create new app
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        
+        if not name:
+            flash('App name is required', 'error')
+            return render_template('admin/app_form.html', app=None)
+        
+        # Check if app already exists
+        existing = App.query.filter_by(name=name).first()
+        if existing:
+            flash('An app with this name already exists', 'error')
+            return render_template('admin/app_form.html', app=None)
+        
+        # Create new app
+        new_app = App(
+            name=name,
+            description=description if description else None,
+            created_by=current_user.id,
+            updated_by=current_user.id
+        )
+        
+        db.session.add(new_app)
+        db.session.commit()
+        
+        flash(f'App "{name}" created successfully', 'success')
+        return redirect(url_for('admin.apps_list'))
+        
+    except Exception as e:
+        logger.error(f"Error creating app: {e}")
+        db.session.rollback()
+        flash('Error creating app', 'error')
+        return render_template('admin/app_form.html', app=None)
+
+@admin_bp.route('/apps/<int:app_id>/edit', methods=['GET', 'POST'])
+@superadmin_required
+def edit_app(app_id):
+    """Edit existing app"""
+    app = App.query.get_or_404(app_id)
+    
+    if request.method == 'GET':
+        return render_template('admin/app_form.html', app=app)
+    
+    try:
+        # Handle POST request - update app
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        active = request.form.get('active') == 'on'
+        
+        if not name:
+            flash('App name is required', 'error')
+            return render_template('admin/app_form.html', app=app)
+        
+        # Check if name is already taken by another app
+        existing = App.query.filter(App.id != app_id, App.name == name).first()
+        if existing:
+            flash('An app with this name already exists', 'error')
+            return render_template('admin/app_form.html', app=app)
+        
+        # Update app
+        app.name = name
+        app.description = description if description else None
+        app.active = active
+        app.updated_by = current_user.id
+        app.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        flash(f'App "{name}" updated successfully', 'success')
+        return redirect(url_for('admin.apps_list'))
+        
+    except Exception as e:
+        logger.error(f"Error updating app: {e}")
+        db.session.rollback()
+        flash('Error updating app', 'error')
+        return render_template('admin/app_form.html', app=app)
+
+@admin_bp.route('/apps/<int:app_id>/delete', methods=['POST'])
+@superadmin_required
+def delete_app(app_id):
+    """Delete (deactivate) app"""
+    try:
+        app = App.query.get_or_404(app_id)
+        
+        # Check if app has active tokens
+        active_tokens = AppToken.query.filter_by(app_id=app_id, active=True).count()
+        if active_tokens > 0:
+            flash(f'Cannot delete app "{app.name}" - it has {active_tokens} active tokens. Revoke tokens first.', 'error')
+            return redirect(url_for('admin.apps_list'))
+        
+        app.active = False
+        app.updated_by = current_user.id
+        app.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        flash(f'App "{app.name}" deleted successfully', 'success')
+        return redirect(url_for('admin.apps_list'))
+        
+    except Exception as e:
+        logger.error(f"Error deleting app: {e}")
+        db.session.rollback()
+        flash('Error deleting app', 'error')
+        return redirect(url_for('admin.apps_list'))
+
 # === API TOKEN MANAGEMENT ===
 
-@admin_bp.route('/users/<int:user_id>/api-key/generate', methods=['POST'])
+@admin_bp.route('/apps/<int:app_id>/tokens/new', methods=['GET', 'POST'])
 @superadmin_required
-def generate_api_key(user_id):
-    """Generate API key for user"""
+def new_token(app_id):
+    """Create new API token for app"""
+    app = App.query.get_or_404(app_id)
+    
+    if not app.active:
+        flash('Cannot create tokens for inactive apps', 'error')
+        return redirect(url_for('admin.apps_list'))
+    
+    if request.method == 'GET':
+        return render_template('admin/token_form.html', app=app, token=None)
+    
     try:
-        user = User.query.get_or_404(user_id)
+        # Handle POST request - create new token
+        name = request.form.get('name', '').strip()
         
-        # Generate new API key
+        if not name:
+            flash('Token name is required', 'error')
+            return render_template('admin/token_form.html', app=app, token=None)
+        
+        # Check if token name already exists for this app
+        existing = AppToken.query.filter_by(app_id=app_id, name=name).first()
+        if existing:
+            flash('A token with this name already exists for this app', 'error')
+            return render_template('admin/token_form.html', app=app, token=None)
+        
+        # Generate new API token
         import secrets
-        api_key = f"mg_{''.join(secrets.choice('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789') for _ in range(32))}"
+        import hashlib
         
-        user.api_key = api_key
-        user.api_key_created = datetime.utcnow()
-        user.updated_by = current_user.id
-        user.updated_at = datetime.utcnow()
+        # Generate raw token
+        raw_token = f"mg_{''.join(secrets.choice('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789') for _ in range(32))}"
         
+        # Hash the token for storage
+        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        
+        # Create new token
+        new_token = AppToken(
+            app_id=app_id,
+            name=name,
+            token_hash=token_hash,
+            prefix="mg_",
+            created_by=current_user.id,
+            updated_by=current_user.id
+        )
+        
+        db.session.add(new_token)
         db.session.commit()
         
-        flash(f'API key generated for user "{user.name}"', 'success')
+        flash(f'Token "{name}" created successfully. Token: {raw_token}', 'success')
+        session['new_token'] = raw_token  # Store in session to display once
         return redirect(url_for('admin.tokens'))
         
     except Exception as e:
-        logger.error(f"Error generating API key: {e}")
+        logger.error(f"Error creating token: {e}")
         db.session.rollback()
-        flash('Error generating API key', 'error')
+        flash('Error creating token', 'error')
+        return render_template('admin/token_form.html', app=app, token=None)
+
+@admin_bp.route('/tokens/<int:token_id>/revoke', methods=['POST'])
+@superadmin_required
+def revoke_token(token_id):
+    """Revoke API token"""
+    try:
+        token = AppToken.query.get_or_404(token_id)
+        
+        token.active = False
+        token.updated_by = current_user.id
+        token.updated_at = datetime.utcnow()
+        
+        db.session.commit()
+        
+        flash(f'Token "{token.name}" revoked successfully', 'success')
+        return redirect(url_for('admin.tokens'))
+        
+    except Exception as e:
+        logger.error(f"Error revoking token: {e}")
+        db.session.rollback()
+        flash('Error revoking token', 'error')
         return redirect(url_for('admin.tokens'))
 
-@admin_bp.route('/users/<int:user_id>/api-key/regenerate', methods=['POST'])
+@admin_bp.route('/tokens/<int:token_id>/delete', methods=['POST'])
 @superadmin_required
-def regenerate_api_key(user_id):
-    """Regenerate API key for user"""
+def delete_token(token_id):
+    """Permanently delete API token"""
     try:
-        user = User.query.get_or_404(user_id)
+        token = AppToken.query.get_or_404(token_id)
+        token_name = token.name
         
-        # Generate new API key
-        import secrets
-        api_key = f"mg_{''.join(secrets.choice('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789') for _ in range(32))}"
-        
-        user.api_key = api_key
-        user.api_key_created = datetime.utcnow()
-        user.updated_by = current_user.id
-        user.updated_at = datetime.utcnow()
-        
+        db.session.delete(token)
         db.session.commit()
         
-        flash(f'API key regenerated for user "{user.name}"', 'success')
+        flash(f'Token "{token_name}" deleted permanently', 'success')
         return redirect(url_for('admin.tokens'))
         
     except Exception as e:
-        logger.error(f"Error regenerating API key: {e}")
+        logger.error(f"Error deleting token: {e}")
         db.session.rollback()
-        flash('Error regenerating API key', 'error')
-        return redirect(url_for('admin.tokens'))
-
-@admin_bp.route('/users/<int:user_id>/api-key/revoke', methods=['POST'])
-@superadmin_required
-def revoke_api_key(user_id):
-    """Revoke API key for user"""
-    try:
-        user = User.query.get_or_404(user_id)
-        
-        user.api_key = None
-        user.api_key_created = None
-        user.updated_by = current_user.id
-        user.updated_at = datetime.utcnow()
-        
-        db.session.commit()
-        
-        flash(f'API key revoked for user "{user.name}"', 'success')
-        return redirect(url_for('admin.tokens'))
-        
-    except Exception as e:
-        logger.error(f"Error revoking API key: {e}")
-        db.session.rollback()
-        flash('Error revoking API key', 'error')
+        flash('Error deleting token', 'error')
         return redirect(url_for('admin.tokens'))

@@ -14,6 +14,7 @@ db = SQLAlchemy()
 from .user import User, Role, roles_users, PasswordResetToken
 from .glossary import Category, Term  
 from .files import STLFile, VideoFile, FileUploadLog
+from .app import App, AppToken
 
 __all__ = [
     'db',
@@ -25,5 +26,7 @@ __all__ = [
     'Term',
     'STLFile', 
     'VideoFile', 
-    'FileUploadLog'
+    'FileUploadLog',
+    'App',
+    'AppToken'
 ]

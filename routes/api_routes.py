@@ -1,11 +1,11 @@
 """
 Main API routes for CRUD operations
 """
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask import Blueprint, request, jsonify, g
 from datetime import datetime
 import re
 from models import db, User, Term, Category, STLFile
+from services.api_auth_service import api_token_required
 from utils.logger import logger
 
 api_bp = Blueprint('api', __name__)
@@ -22,7 +22,7 @@ def health_check():
 # === TERMS API ENDPOINTS ===
 
 @api_bp.route('/terms', methods=['GET'])
-@jwt_required()
+@api_token_required
 def get_terms():
     """Get all terms with filtering"""
     try:
@@ -68,7 +68,7 @@ def get_terms():
         return jsonify({'error': 'Internal server error'}), 500
 
 @api_bp.route('/terms/<int:term_id>', methods=['GET'])
-@jwt_required()
+@api_token_required
 def get_term(term_id):
     """Get a specific term"""
     try:
@@ -83,15 +83,12 @@ def get_term(term_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 @api_bp.route('/terms', methods=['POST'])
-@jwt_required()
+@api_token_required
 def create_term():
     """Create a new term"""
     try:
-        current_user_id = get_jwt_identity()
-        user = User.query.get(current_user_id)
-        
-        if not user or not user.has_role('admin'):
-            return jsonify({'error': 'Admin access required'}), 403
+        # API tokens have full access - no additional permission check needed
+        # In the future, you could add app-level permissions here
         
         data = request.get_json()
         if not data:
@@ -120,12 +117,11 @@ def create_term():
         term = Term(
             term=data['term'],
             slug=slug,
+            pronunciation=data.get('pronunciation', ''),  # Required field
             definition=data['definition'],
             category_id=data['category_id'],
             difficulty=data.get('difficulty', 'tourist'),
-            etymology=data.get('etymology'),
-            created_by=current_user_id,
-            updated_by=current_user_id
+            etymology=data.get('etymology')
         )
         
         db.session.add(term)
@@ -142,15 +138,10 @@ def create_term():
         return jsonify({'error': 'Internal server error'}), 500
 
 @api_bp.route('/terms/<int:term_id>', methods=['PUT'])
-@jwt_required()
+@api_token_required
 def update_term(term_id):
     """Update an existing term"""
     try:
-        current_user_id = get_jwt_identity()
-        user = User.query.get(current_user_id)
-        
-        if not user or not user.has_role('admin'):
-            return jsonify({'error': 'Admin access required'}), 403
         
         term = Term.query.get_or_404(term_id)
         data = request.get_json()
@@ -189,7 +180,9 @@ def update_term(term_id):
         if 'etymology' in data:
             term.etymology = data['etymology']
         
-        term.updated_by = current_user_id
+        if 'pronunciation' in data:
+            term.pronunciation = data['pronunciation']
+        
         term.updated_at = datetime.utcnow()
         
         db.session.commit()
@@ -205,21 +198,15 @@ def update_term(term_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 @api_bp.route('/terms/<int:term_id>', methods=['DELETE'])
-@jwt_required()
+@api_token_required
 def delete_term(term_id):
     """Delete (deactivate) a term"""
     try:
-        current_user_id = get_jwt_identity()
-        user = User.query.get(current_user_id)
-        
-        if not user or not user.has_role('admin'):
-            return jsonify({'error': 'Admin access required'}), 403
         
         term = Term.query.get_or_404(term_id)
         
         # Soft delete
         term.is_active = False
-        term.updated_by = current_user_id
         term.updated_at = datetime.utcnow()
         
         db.session.commit()
@@ -234,7 +221,7 @@ def delete_term(term_id):
 # === CATEGORIES API ENDPOINTS ===
 
 @api_bp.route('/categories', methods=['GET'])
-@jwt_required()
+@api_token_required
 def get_categories():
     """Get all categories"""
     try:
@@ -251,15 +238,10 @@ def get_categories():
         return jsonify({'error': 'Internal server error'}), 500
 
 @api_bp.route('/categories', methods=['POST'])
-@jwt_required()
+@api_token_required
 def create_category():
     """Create a new category"""
     try:
-        current_user_id = get_jwt_identity()
-        user = User.query.get(current_user_id)
-        
-        if not user or not user.has_role('admin'):
-            return jsonify({'error': 'Admin access required'}), 403
         
         data = request.get_json()
         if not data or not data.get('name'):
@@ -283,9 +265,7 @@ def create_category():
             name=data['name'],
             slug=slug,
             description=data.get('description'),
-            sort_order=data.get('sort_order', 0),
-            created_by=current_user_id,
-            updated_by=current_user_id
+            sort_order=data.get('sort_order', 0)
         )
         
         db.session.add(category)

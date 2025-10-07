@@ -18,19 +18,19 @@
         <div class="space-y-2">
             <div class="flex justify-between">
                 <span class="text-gray-600">Email:</span>
-                <span class="font-medium">{{ user_to_delete.email }}</span>
+                <span class="font-medium">{{ user.email }}</span>
             </div>
-            {% if user_to_delete.first_name or user_to_delete.last_name %}
+            {% if user.first_name or user.last_name %}
             <div class="flex justify-between">
                 <span class="text-gray-600">Name:</span>
-                <span class="font-medium">{{ user_to_delete.first_name }} {{ user_to_delete.last_name }}</span>
+                <span class="font-medium">{{ user.first_name }} {{ user.last_name }}</span>
             </div>
             {% endif %}
             <div class="flex justify-between">
                 <span class="text-gray-600">Roles:</span>
                 <span class="font-medium">
-                    {% if user_to_delete.roles %}
-                        {% for role in user_to_delete.roles %}
+                    {% if user.roles %}
+                        {% for role in user.roles %}
                             {{ role.name }}{% if not loop.last %}, {% endif %}
                         {% endfor %}
                     {% else %}
@@ -56,7 +56,7 @@
     </div>
 
     <div class="flex justify-center space-x-4">
-        <form method="post" action="{{ url_for('admin.delete_user', user_id=user_to_delete.id) }}">
+        <form method="post" action="{{ url_for('admin.delete_user', user_id=user.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
             <button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-lg transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500">
                 <i class="fas fa-trash mr-2"></i>Yes, Delete User
