@@ -4,7 +4,7 @@ Main API routes for CRUD operations
 from flask import Blueprint, request, jsonify, g
 from datetime import datetime
 import re
-from models import db, User, Term, Category, STLFile
+from models import db, Term, Category, STLFile
 from services.api_auth_service import api_token_required
 from utils.logger import logger
 

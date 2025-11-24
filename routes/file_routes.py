@@ -7,7 +7,7 @@ from flask_login import login_required, current_user
 from functools import wraps
 from datetime import datetime
 import os
-from models import db, STLFile, VideoFile, User
+from models import db, STLFile, VideoFile
 from utils.logger import logger
 
 file_bp = Blueprint('files', __name__)
