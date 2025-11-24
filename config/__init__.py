@@ -20,10 +20,9 @@ class Config:
     # Basic Flask Configuration
     SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
     
-    # Session Configuration
-    SESSION_COOKIE_SECURE = os.environ.get('RAILWAY_ENVIRONMENT_NAME') is not None  # Only secure in production
-    SESSION_COOKIE_HTTPONLY = True
-    SESSION_COOKIE_SAMESITE = 'Lax'
+    # OAuth2 Configuration
+    AUTH_SERVICE_URL = os.environ.get('AUTH_SERVICE_URL', 'https://auth.mardigrasworld.com')
+    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', SECRET_KEY)
     
     # Database configuration
     @staticmethod
@@ -48,12 +47,9 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # CORS Configuration
-    default_origins = 'http://localhost:3000,http://localhost:5555,https://pixieview-demo.up.railway.app'
+    default_origins = 'https://admin.mardigrasworld.com,https://auth.mardigrasworld.com,http://localhost:3000,https://pixieview-demo.up.railway.app'
     ALLOWED_ORIGINS = os.environ.get('ALLOWED_ORIGINS', default_origins).split(',')
     
-    # JWT Configuration
-    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', SECRET_KEY)
-    JWT_ACCESS_TOKEN_EXPIRES = False  # Tokens don't expire by default
     
     # Mail Configuration
     MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
@@ -73,9 +69,6 @@ class Config:
     MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 100MB max file size
     UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', 'uploads')
     
-    # CSRF Configuration
-    WTF_CSRF_TIME_LIMIT = None  # No time limit on CSRF tokens
-    WTF_CSRF_SSL_STRICT = False  # Allow CSRF over HTTP in development
     
     # Security Headers
     SECURITY_HEADERS = {
@@ -93,7 +86,6 @@ class ProductionConfig(Config):
     """Production configuration"""
     DEBUG = False
     TESTING = False
-    WTF_CSRF_SSL_STRICT = True  # Enforce HTTPS for CSRF in production
 
 class TestingConfig(Config):
     """Testing configuration"""

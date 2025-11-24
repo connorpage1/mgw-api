@@ -1,27 +1,23 @@
 """
-Mardi Gras API - Refactored Flask Application
-A clean, modular API for managing glossary terms, user authentication, and file uploads
+Mardi Gras API - Pure API Service
+A clean API service for managing glossary terms and file uploads with OAuth2 integration
 """
 
-from flask import Flask, request, jsonify, render_template, redirect, url_for, session
+from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
-from flask_jwt_extended import JWTManager, jwt_required
 from flask_cors import CORS
 from flask_mail import Mail
-from flask_login import LoginManager, current_user, login_user, logout_user
-from flask_wtf.csrf import CSRFProtect
 from werkzeug.middleware.proxy_fix import ProxyFix
 from datetime import datetime
 import os
-import secrets
 
 # Import configuration and utilities
 from config import get_config
 from utils.logger import logger
 
 # Import models and services
-from models import db, User
-from services.auth_service import secure_hasher, rate_limiter
+from models import db
+from services.oauth2_service import OAuth2Service
 
 # Import route blueprints
 from routes import register_routes
@@ -45,8 +41,11 @@ def create_app(config_name=None):
     # Initialize extensions
     db.init_app(app)
     
-    # JWT Configuration
-    jwt = JWTManager(app)
+    # Initialize OAuth2 service
+    app.oauth2_service = OAuth2Service(
+        auth_service_url=app.config.get('AUTH_SERVICE_URL', 'https://auth.mardigrasworld.com'),
+        jwt_secret_key=app.config.get('JWT_SECRET_KEY')
+    )
     
     # CORS Configuration
     cors = CORS(app, origins=app.config['ALLOWED_ORIGINS'], resources={
@@ -55,37 +54,8 @@ def create_app(config_name=None):
         r"/*": {"origins": app.config['ALLOWED_ORIGINS']}  # Default restriction for all other routes
     })
     
-    # Mail Configuration
+    # Mail Configuration (for notifications only)
     mail = Mail(app)
-    
-    # CSRF Protection Configuration
-    csrf = CSRFProtect(app)
-    
-    # Configure CSRF for Railway deployment
-    if os.environ.get('RAILWAY_ENVIRONMENT_NAME'):
-        app.config['WTF_CSRF_SSL_STRICT'] = False  # Railway handles SSL termination
-        app.config['WTF_CSRF_TIME_LIMIT'] = 3600   # 1 hour token lifetime
-        # Allow Railway's domain for referrer checks
-        app.config['WTF_CSRF_EXEMPT_LIST'] = []
-    
-    # Flask-Login Configuration
-    login_manager = LoginManager()
-    login_manager.init_app(app)
-    login_manager.login_view = 'auth.login'
-    login_manager.login_message = 'Please log in to access this page.'
-    
-    @login_manager.user_loader
-    def load_user(user_id):
-        """Load user for Flask-Login"""
-        return User.query.get(int(user_id))
-    
-    # JWT Token Blacklist (in production, use Redis or database)
-    blacklisted_tokens = set()
-    
-    @jwt.token_in_blocklist_loader
-    def check_if_token_revoked(jwt_header, jwt_payload):
-        """Check if JWT token is blacklisted"""
-        return jwt_payload['jti'] in blacklisted_tokens
     
     # Template filters
     @app.template_filter('strftime')
@@ -124,14 +94,14 @@ def create_app(config_name=None):
             logger.warning(f"Request headers: {dict(request.headers)}")
             logger.warning(f"Form data: {request.form}")
         
-        return render_template('admin/400.html'), 400
+        return jsonify({'error': 'Bad Request', 'message': error_description}), 400
     
     @app.errorhandler(404)
     def handle_not_found(e):
         """Handle 404 Not Found errors"""
         if request.path.startswith('/api/'):
             return jsonify({'error': 'Not Found', 'message': 'Resource not found'}), 404
-        return render_template('admin/404.html'), 404
+        return jsonify({'error': 'Not Found', 'message': 'Resource not found'}), 404
     
     @app.errorhandler(500)
     def handle_internal_error(e):
@@ -139,13 +109,24 @@ def create_app(config_name=None):
         logger.error(f"Internal server error: {e}")
         if request.path.startswith('/api/'):
             return jsonify({'error': 'Internal Server Error', 'message': 'An unexpected error occurred'}), 500
-        return render_template('admin/500.html'), 500
+        return jsonify({'error': 'Internal Server Error', 'message': 'An unexpected error occurred'}), 500
     
     # Main routes
     @app.route('/')
     def index():
         """Main application index"""
-        return redirect(url_for('admin.dashboard'))
+        return jsonify({
+            'service': 'mardi-gras-api',
+            'version': '3.0.0',
+            'description': 'Pure API service for Mardi Gras glossary and file management',
+            'endpoints': {
+                'health': '/health',
+                'glossary': '/glossary',
+                'files': '/files',
+                'api': '/api',
+                'pixie': '/pixie'
+            }
+        })
     
     @app.route('/health')
     def health_check():
@@ -160,14 +141,7 @@ def create_app(config_name=None):
     # Register all route blueprints
     register_routes(app)
     
-    # Exempt API routes from CSRF protection
-    from routes.pixie_routes import pixie_bp
-    from routes.api_routes import api_bp  
-    from routes.glossary_routes import glossary_bp
-    
-    csrf.exempt(pixie_bp)
-    csrf.exempt(api_bp)
-    csrf.exempt(glossary_bp)
+    # All routes are now API routes - no CSRF needed
     
     # Database initialization
     with app.app_context():

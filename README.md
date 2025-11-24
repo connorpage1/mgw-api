@@ -1,33 +1,31 @@
 # 🎭 Mardi Gras API
 
-A comprehensive Flask API for managing Mardi Gras terminology and glossary content. Features a full admin interface, JWT authentication, and RESTful endpoints for public consumption.
+A pure Flask API service for managing Mardi Gras terminology and glossary content. Integrates with OAuth2 SSO authentication and provides RESTful endpoints for consumption by the React admin frontend.
 
 ## 🚀 Live Application
 
 - **Production URL:** https://mgw-api-production.up.railway.app
-- **Admin Interface:** https://mgw-api-production.up.railway.app/login
+- **API Documentation:** Available at root endpoint
 - **Health Check:** https://mgw-api-production.up.railway.app/health
 
 ## ✨ Features
 
-- 📚 **Glossary Management**: Full CRUD operations for terms and categories
-- 👥 **User Management**: Admin interface for user accounts and roles
-- 🔐 **Authentication**: Secure login with Flask-Login and JWT tokens
-- 🎨 **Admin Interface**: Beautiful web-based management dashboard
-- 📊 **Statistics**: API usage and content analytics
+- 📚 **Glossary API**: Full CRUD operations for terms and categories via REST API
+- 🔐 **OAuth2 Integration**: Token-based authentication with mardi-gras-auth service
+- 📊 **Public API**: Open endpoints for glossary consumption
 - 🔍 **Search & Filter**: Advanced filtering for terms and categories
-- 📱 **Responsive Design**: Works on desktop and mobile devices
-- 🛡️ **CSRF Protection**: Security against cross-site request forgery
-- ⚡ **Rate Limiting**: Protection against abuse and spam
-- 📈 **Bulk Import**: CSV upload for batch term creation
+- 📁 **File Management**: STL and video file upload/management APIs
+- 🎭 **Pixie Integration**: 3D viewer API endpoints
+- 🛡️ **CORS Protection**: Configured for authorized origins
+- ⚡ **Pure JSON**: All responses in JSON format for frontend consumption
 
 ## 🏗️ Architecture
 
-- **Backend**: Flask + SQLAlchemy + PostgreSQL
-- **Frontend**: Jinja2 templates with Bootstrap 5
-- **Authentication**: Flask-Login + JWT
-- **Password Hashing**: Argon2
-- **Email**: Flask-Mail with SMTP
+- **API Service**: Flask + SQLAlchemy + PostgreSQL
+- **Authentication**: OAuth2 integration with mardi-gras-auth service
+- **Frontend**: Separate React application (admin.mardigrasworld.com)
+- **Token Validation**: JWT with PyJWT
+- **Email**: Flask-Mail with SMTP (minimal usage)
 - **Deployment**: Railway.app with PostgreSQL service
 
 ## 📋 Requirements
@@ -59,13 +57,14 @@ A comprehensive Flask API for managing Mardi Gras terminology and glossary conte
 
 4. **Set environment variables**
    ```bash
-   cp .env.example .env
-   # Edit .env with your configuration
+   export AUTH_SERVICE_URL=https://auth.mardigrasworld.com
+   export JWT_SECRET_KEY=your-shared-jwt-secret
+   export DATABASE_URL=sqlite:///instance/mardi_gras_dev.db
    ```
 
 5. **Initialize database**
    ```bash
-   python init_production_db.py
+   python init_api_db.py
    ```
 
 6. **Run the application**
