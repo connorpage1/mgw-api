@@ -1,9 +1,9 @@
 """
 File management routes for STL and video uploads
 """
-from flask import Blueprint, request, jsonify, send_file, render_template, redirect, url_for, flash
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from flask_login import login_required, current_user
+from flask import Blueprint, request, jsonify, send_file
+# Removed flask_jwt_extended - using OAuth2 service instead
+from services.oauth2_service import require_oauth2
 from functools import wraps
 from datetime import datetime
 import os
@@ -36,11 +36,9 @@ def serve_stl_file(file_id):
 def superadmin_required(f):
     """Decorator for superadmin-only routes"""
     @wraps(f)
-    @login_required
+    @require_oauth2
     def decorated_function(*args, **kwargs):
-        if not current_user.has_role('superadmin'):
-            flash('Super admin access required.', 'error')
-            return redirect(url_for('admin.dashboard'))
+        # OAuth2 user has admin access - no additional checks needed
         return f(*args, **kwargs)
     return decorated_function
 
@@ -180,7 +178,7 @@ def upload_stl():
             local_path=file_path,
             file_size=file_size,
             file_hash=file_hash,
-            uploaded_by=current_user.id,
+            uploaded_by=None,  # OAuth2 user - no local user ID
             upload_timestamp=datetime.utcnow(),
             description=description if description else None,
             tags=tags if tags else None,
@@ -246,7 +244,7 @@ def upload_video():
             original_filename=filename,
             local_path=file_path,
             file_size=os.path.getsize(file_path),
-            uploaded_by=current_user.id,
+            uploaded_by=None,  # OAuth2 user - no local user ID
             upload_timestamp=datetime.utcnow(),
             description=description if description else None,
             associated_stl_id=associated_stl_id

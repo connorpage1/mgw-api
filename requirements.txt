@@ -1,7 +1,6 @@
 # Core Flask
 Flask==3.1.1
 Flask-SQLAlchemy==3.1.1
-Flask-Migrate==4.1.0
 
 # OAuth2 Integration
 PyJWT==2.10.1
@@ -17,17 +16,12 @@ python-dotenv==1.1.0
 # Production server
 gunicorn==21.2.0
 
-# PostgreSQL for Railway
+# PostgreSQL for Railway (production only)
 psycopg2-binary==2.9.9
 
 # File Storage
 boto3==1.34.0
 Werkzeug==3.1.3
-
-# Testing
-pytest==7.4.4
-pytest-flask==1.3.0
-Faker==37.5.3
 
 # Optional (if Redis available)
 # Flask-Limiter==3.5.0

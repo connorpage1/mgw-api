@@ -1,5 +1,8 @@
 """
 Email service for sending user notifications and password setup links
+
+NOTE: This service is currently disabled as it references User models that don't exist
+in this pure OAuth2 API service. Email functionality is handled by the auth service.
 """
 import smtplib
 import os
@@ -7,7 +10,8 @@ import secrets
 import hashlib
 from datetime import datetime, timedelta
 from flask import current_app, render_template, url_for
-from models import db, User, PasswordResetToken
+# Disabled - not used in pure API service with OAuth2
+# from models import db, User, PasswordResetToken
 from utils.logger import logger
 
 # Import email classes with explicit module references to avoid conflicts

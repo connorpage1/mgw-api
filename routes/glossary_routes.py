@@ -1,8 +1,8 @@
 """
 Public glossary API routes for terms and categories
 """
-from flask import Blueprint, request, jsonify, render_template, redirect, url_for, flash
-from flask_login import login_required, current_user
+from flask import Blueprint, request, jsonify
+from services.oauth2_service import require_oauth2
 from sqlalchemy import or_, desc, asc, func
 from functools import wraps
 from models import db, Term, Category
@@ -179,11 +179,9 @@ def api_search():
 def admin_required(f):
     """Decorator for admin-only routes"""
     @wraps(f)
-    @login_required
+    @require_oauth2
     def decorated_function(*args, **kwargs):
-        if not current_user.has_role('admin') and not current_user.has_role('superadmin'):
-            flash('Admin access required.', 'error')
-            return redirect(url_for('admin.dashboard'))
+        # OAuth2 user has admin access - no additional checks needed
         return f(*args, **kwargs)
     return decorated_function
 
