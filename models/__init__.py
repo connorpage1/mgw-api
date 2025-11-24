@@ -4,7 +4,7 @@ Database models for the Mardi Gras API
 from datetime import datetime
 import uuid
 from flask_sqlalchemy import SQLAlchemy
-from flask_login import UserMixin
+# Removed flask_login import - this is a pure API service with OAuth2
 from sqlalchemy import func
 
 # Database instance - will be initialized in main app
