@@ -15,23 +15,27 @@ class OAuth2Service:
         self.jwt_secret_key = jwt_secret_key
     
     def validate_token(self, token):
-        """Validate OAuth2 access token with auth service"""
+        """Validate OAuth2 access token with auth service using /api/validate_token endpoint"""
         try:
-            # Try to decode JWT token locally first
-            payload = jwt.decode(token, self.jwt_secret_key, algorithms=['HS256'])
-            return {
-                'valid': True,
-                'user_id': payload.get('sub'),
-                'app_id': payload.get('app_id'),
-                'scopes': payload.get('scopes', []),
-                'exp': payload.get('exp')
-            }
-        except jwt.ExpiredSignatureError:
-            logger.warning("Token has expired")
-            return {'valid': False, 'error': 'Token expired'}
-        except jwt.InvalidTokenError:
-            logger.warning("Invalid token format")
-            return {'valid': False, 'error': 'Invalid token'}
+            response = requests.post(
+                f"{self.auth_service_url}/api/validate_token",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                error_data = response.json() if response.headers.get('content-type', '').startswith('application/json') else {}
+                logger.warning(f"Token validation failed: {response.status_code}, {error_data}")
+                return {'valid': False, 'error': error_data.get('error', 'Token validation failed')}
+                
+        except requests.exceptions.Timeout:
+            logger.error("Auth service timeout")
+            return {'valid': False, 'error': 'Auth service timeout'}
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Auth service request failed: {e}")
+            return {'valid': False, 'error': 'Auth service unavailable'}
         except Exception as e:
             logger.error(f"Token validation error: {e}")
             return {'valid': False, 'error': 'Token validation failed'}
@@ -48,8 +52,15 @@ class OAuth2Service:
         except Exception as e:
             logger.error(f"Token introspection failed: {e}")
             return {'active': False}
+    
+    def get_user_permissions(self, token, app_name="mardi_gras_admin"):
+        """Get user permissions for a specific app"""
+        user_data = self.validate_token(token)
+        if not user_data or not user_data.get("valid"):
+            return None
+        return user_data.get("app_roles", {}).get(app_name, [])
 
-def require_oauth2(scopes=None):
+def require_oauth2(permissions=None):
     """Decorator to require OAuth2 authentication"""
     def decorator(f):
         @wraps(f)
@@ -67,10 +78,10 @@ def require_oauth2(scopes=None):
             if not validation_result.get('valid'):
                 return jsonify({'error': validation_result.get('error', 'Invalid token')}), 401
             
-            # Check scopes if required
-            if scopes:
-                token_scopes = validation_result.get('scopes', [])
-                if not any(scope in token_scopes for scope in scopes):
+            # Check permissions if required
+            if permissions:
+                user_permissions = oauth2_service.get_user_permissions(token)
+                if not user_permissions or not any(p in user_permissions for p in permissions):
                     return jsonify({'error': 'Insufficient permissions'}), 403
             
             # Add user context to request
@@ -82,4 +93,4 @@ def require_oauth2(scopes=None):
     return decorator
 
 # Convenience decorator for admin endpoints
-require_admin = require_oauth2(['admin'])
+require_admin = require_oauth2(['admin', 'admin_read'])
