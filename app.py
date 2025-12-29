@@ -48,11 +48,14 @@ def create_app(config_name=None):
     )
     
     # CORS Configuration
-    cors = CORS(app, origins=app.config['ALLOWED_ORIGINS'], resources={
-        r"/pixie/api/*": {"origins": "*"},  # Allow all origins for Pixie API endpoints
-        r"/api/*": {"origins": app.config['ALLOWED_ORIGINS']},  # Restrict other API endpoints
-        r"/*": {"origins": app.config['ALLOWED_ORIGINS']}  # Default restriction for all other routes
-    })
+    cors = CORS(app, 
+        origins=app.config['ALLOWED_ORIGINS'], 
+        supports_credentials=True,
+        resources={
+            r"/pixie/api/*": {"origins": app.config['ALLOWED_ORIGINS'], "supports_credentials": True},  # Allow credentials for admin endpoints
+            r"/api/*": {"origins": app.config['ALLOWED_ORIGINS'], "supports_credentials": True},  # Restrict other API endpoints
+            r"/*": {"origins": app.config['ALLOWED_ORIGINS'], "supports_credentials": True}  # Default restriction for all other routes
+        })
     
     # Mail Configuration (for notifications only)
     mail = Mail(app)

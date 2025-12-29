@@ -103,7 +103,7 @@ def pixie_api_download_stl(file_id):
         return jsonify({'error': 'File not found'}), 404
 
 @pixie_bp.route('/api/admin/files', methods=['GET'])
-@require_oauth2
+@require_oauth2()
 def pixie_api_admin_files():
     """OAuth2 Protected: Get all files for admin management"""
     try:
@@ -114,11 +114,13 @@ def pixie_api_admin_files():
             file_list.append({
                 'id': file.id,
                 'filename': file.original_filename,
+                'type': 'stl',  # All files in STLFile table are STL files
                 'description': file.description,
                 'size': file.file_size,
-                'upload_date': file.upload_timestamp.isoformat(),
+                'uploadedAt': file.upload_timestamp.isoformat(),
+                'uploadedBy': file.uploaded_by or 'Unknown',
+                'downloadCount': file.view_count or 0,
                 'tags': file.tags.split(',') if file.tags else [],
-                'view_count': file.view_count,
                 'is_featured': file.is_featured,
                 'is_partial': file.is_partial,
                 'parent_file_id': file.parent_file_id

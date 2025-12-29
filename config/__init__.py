@@ -47,7 +47,7 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # CORS Configuration
-    default_origins = 'https://admin.mardigrasworld.com,https://auth.mardigrasworld.com,http://localhost:3000,https://pixieview-demo.up.railway.app'
+    default_origins = 'https://admin.mardigrasworld.com,https://auth.mardigrasworld.com,http://localhost:3000,http://localhost:3001,http://localhost:3002,https://pixieview-demo.up.railway.app'
     ALLOWED_ORIGINS = os.environ.get('ALLOWED_ORIGINS', default_origins).split(',')
     
     

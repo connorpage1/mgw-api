@@ -21,8 +21,8 @@ class STLFile(db.Model):
     description = db.Column(db.Text)
     tags = db.Column(db.String(500))
     
-    # User who uploaded the file
-    uploaded_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    # User who uploaded the file (stored as email since no local User model)
+    uploaded_by = db.Column(db.String(255), nullable=False)
     
     # Parent-child file relationships
     parent_file_id = db.Column(db.String(36), db.ForeignKey('stl_files.id'), nullable=True)
@@ -33,7 +33,6 @@ class STLFile(db.Model):
     
     # Relationships
     videos = db.relationship('VideoFile', backref='stl_file', lazy=True, cascade='all, delete-orphan')
-    uploader = db.relationship('User', backref='uploaded_stl_files')
     parent_file = db.relationship('STLFile', remote_side=[id], backref='child_files')
     
     # Display flags
@@ -69,7 +68,7 @@ class STLFile(db.Model):
             'description': self.description,
             'tags': self.tags.split(',') if self.tags else [],
             'is_featured': self.is_featured,
-            'uploaded_by': self.uploader.email if self.uploader else None,
+            'uploaded_by': self.uploaded_by,
             'is_partial': self.is_partial,
             'parent_file_id': self.parent_file_id,
             'parent_file': self.parent_file.original_filename if self.parent_file else None,
@@ -90,9 +89,8 @@ class VideoFile(db.Model):
     description = db.Column(db.Text)
     associated_stl_id = db.Column(db.String(36), db.ForeignKey('stl_files.id'), nullable=True)
     
-    # User who uploaded the file
-    uploaded_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    uploader = db.relationship('User', backref='uploaded_video_files')
+    # User who uploaded the file (stored as email since no local User model)
+    uploaded_by = db.Column(db.String(255), nullable=False)
     
     def __repr__(self):
         return f'<VideoFile {self.original_filename}>'
@@ -106,7 +104,7 @@ class VideoFile(db.Model):
             'upload_date': self.upload_timestamp.isoformat() if self.upload_timestamp else None,
             'description': self.description,
             'associated_stl_id': self.associated_stl_id,
-            'uploaded_by': self.uploader.email if self.uploader else None
+            'uploaded_by': self.uploaded_by
         }
 
 class FileUploadLog(db.Model):
@@ -122,8 +120,7 @@ class FileUploadLog(db.Model):
     user_agent = db.Column(db.String(500))
     success = db.Column(db.Boolean, default=True)
     error_message = db.Column(db.Text)
-    uploaded_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    uploader = db.relationship('User', backref='file_upload_logs')
+    uploaded_by = db.Column(db.String(255), nullable=False)
     
     def __repr__(self):
         return f'<FileUploadLog {self.filename}>'

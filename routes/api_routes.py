@@ -5,7 +5,7 @@ from flask import Blueprint, request, jsonify, g
 from datetime import datetime
 import re
 from models import db, Term, Category, STLFile
-from services.api_auth_service import api_token_required
+from services.oauth2_service import require_oauth2
 from utils.logger import logger
 
 api_bp = Blueprint('api', __name__)
@@ -22,7 +22,7 @@ def health_check():
 # === TERMS API ENDPOINTS ===
 
 @api_bp.route('/terms', methods=['GET'])
-@api_token_required
+@require_oauth2()
 def get_terms():
     """Get all terms with filtering"""
     try:
@@ -68,7 +68,7 @@ def get_terms():
         return jsonify({'error': 'Internal server error'}), 500
 
 @api_bp.route('/terms/<int:term_id>', methods=['GET'])
-@api_token_required
+@require_oauth2()
 def get_term(term_id):
     """Get a specific term"""
     try:
@@ -83,7 +83,7 @@ def get_term(term_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 @api_bp.route('/terms', methods=['POST'])
-@api_token_required
+@require_oauth2()
 def create_term():
     """Create a new term"""
     try:
@@ -138,7 +138,7 @@ def create_term():
         return jsonify({'error': 'Internal server error'}), 500
 
 @api_bp.route('/terms/<int:term_id>', methods=['PUT'])
-@api_token_required
+@require_oauth2()
 def update_term(term_id):
     """Update an existing term"""
     try:
@@ -198,7 +198,7 @@ def update_term(term_id):
         return jsonify({'error': 'Internal server error'}), 500
 
 @api_bp.route('/terms/<int:term_id>', methods=['DELETE'])
-@api_token_required
+@require_oauth2()
 def delete_term(term_id):
     """Delete (deactivate) a term"""
     try:
@@ -221,7 +221,7 @@ def delete_term(term_id):
 # === CATEGORIES API ENDPOINTS ===
 
 @api_bp.route('/categories', methods=['GET'])
-@api_token_required
+@require_oauth2()
 def get_categories():
     """Get all categories"""
     try:
@@ -238,7 +238,7 @@ def get_categories():
         return jsonify({'error': 'Internal server error'}), 500
 
 @api_bp.route('/categories', methods=['POST'])
-@api_token_required
+@require_oauth2()
 def create_category():
     """Create a new category"""
     try:
