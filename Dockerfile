@@ -39,4 +39,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:5555/health || exit 1
 
 # Command to run the application
-CMD ["sh", "-c", "gunicorn app:app --bind 0.0.0.0:${PORT:-5555} --workers ${WEB_CONCURRENCY:-2} --timeout ${GUNICORN_TIMEOUT:-120} --max-requests ${GUNICORN_MAX_REQUESTS:-1000} --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-50} --access-logfile - --error-logfile -"]
+CMD ["bash", "-c", "gunicorn app:app --bind 0.0.0.0:${PORT:-5555} --workers ${WEB_CONCURRENCY:-2} --timeout ${GUNICORN_TIMEOUT:-120} --max-requests ${GUNICORN_MAX_REQUESTS:-1000} --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-50} --access-logfile - --error-logfile -"]

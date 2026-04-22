@@ -2,7 +2,13 @@
 File validation utilities for secure file uploads
 """
 
-import magic
+try:
+    import magic
+    MAGIC_AVAILABLE = True
+except ImportError:
+    MAGIC_AVAILABLE = False
+    magic = None
+
 from typing import Dict, List, Optional
 
 class FileValidator:
@@ -44,9 +50,12 @@ class FileValidator:
         """
         try:
             # Initialize python-magic (fallback gracefully if not available)
-            try:
-                mime_type = magic.from_file(file_path, mime=True)
-            except Exception:
+            if MAGIC_AVAILABLE:
+                try:
+                    mime_type = magic.from_file(file_path, mime=True)
+                except Exception:
+                    mime_type = None
+            else:
                 mime_type = None
                 
             # Read first 32 bytes for signature validation
