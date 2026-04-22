@@ -11,12 +11,21 @@ from utils.logger import logger
 # Try to import SendGrid (optional dependency)
 try:
     from sendgrid import SendGridAPIClient
-    from sendgrid.helpers.mail import Mail, Attachment, FileContent, FileName, FileType, Disposition
+    from sendgrid.helpers.mail import (
+        Mail,
+        Content,
+        Attachment,
+        FileContent,
+        FileName,
+        FileType,
+        Disposition,
+    )
     SENDGRID_AVAILABLE = True
 except ImportError:
     SENDGRID_AVAILABLE = False
     SendGridAPIClient = None
     Mail = None
+    Content = None
 
 # SMTP fallback imports
 import smtplib
@@ -95,9 +104,15 @@ class EmailService:
         # Fallback to SMTP
         return self._send_via_smtp(recipients, subject, text_content, html_content, attachments)
     
-    def _send_via_sendgrid(self, recipients: List[str], subject: str, text_content: Optional[str], 
+    def _send_via_sendgrid(self, recipients: List[str], subject: str, text_content: Optional[str],
                           html_content: Optional[str], attachments: Optional[List[EmailAttachment]]) -> Dict[str, any]:
         """Send email via SendGrid API"""
+        if not self.sendgrid_from_email:
+            return {
+                'success': False,
+                'provider': 'sendgrid',
+                'error': 'SENDGRID_FROM_EMAIL (or FROM_EMAIL) is not configured',
+            }
         try:
             # Create SendGrid mail object
             message = Mail(
@@ -105,16 +120,13 @@ class EmailService:
                 to_emails=recipients,
                 subject=subject
             )
-            
-            # Add content
+
+            # Add content — SendGrid requires text/plain before text/html
             if text_content:
-                message.content = [{"type": "text/plain", "value": text_content}]
+                message.add_content(Content("text/plain", text_content))
             if html_content:
-                if text_content:
-                    message.content.append({"type": "text/html", "value": html_content})
-                else:
-                    message.content = [{"type": "text/html", "value": html_content}]
-            
+                message.add_content(Content("text/html", html_content))
+
             # Add attachments if provided
             if attachments:
                 for attachment in attachments:
@@ -124,15 +136,15 @@ class EmailService:
                             content_b64 = base64.b64encode(attachment.content).decode()
                         else:
                             content_b64 = base64.b64encode(attachment.content.encode()).decode()
-                        
+
                         sg_attachment = Attachment(
                             file_content=FileContent(content_b64),
                             file_name=FileName(attachment.filename),
                             file_type=FileType(attachment.content_type),
                             disposition=Disposition(attachment.disposition)
                         )
-                        message.attachment = sg_attachment
-                        
+                        message.add_attachment(sg_attachment)
+
                     except Exception as e:
                         logger.warning(f"Failed to add attachment {attachment.filename}: {e}")
             
