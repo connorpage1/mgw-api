@@ -76,6 +76,7 @@ def require_oauth2(permissions=None):
             
             if not validation_result.get('valid'):
                 error_message = validation_result.get('error', 'Invalid token')
+                lowered_error = error_message.lower()
                 # Enhanced security logging
                 client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
                 user_agent = request.headers.get('User-Agent', 'Unknown')
@@ -85,6 +86,8 @@ def require_oauth2(permissions=None):
                     f"Endpoint: {endpoint}, UA: {user_agent}, "
                     f"Error: {error_message}"
                 )
+                if "unavailable" in lowered_error or "timeout" in lowered_error:
+                    return jsonify({'error': error_message}), 503
                 return jsonify({'error': 'Authentication failed'}), 401
             
             # Check permissions if required
