@@ -2,9 +2,8 @@
 OAuth2 service for validating tokens from the mardi-gras-auth service
 """
 import requests
-import jwt
 from functools import wraps
-from flask import request, jsonify, current_app
+from flask import request, jsonify, current_app, g
 from utils.logger import logger
 
 class OAuth2Service:
@@ -70,13 +69,23 @@ def require_oauth2(permissions=None):
             if not auth_header or not auth_header.startswith('Bearer '):
                 return jsonify({'error': 'Missing or invalid authorization header'}), 401
             
-            token = auth_header.split(' ')[1]
+            token = auth_header.split(' ', 1)[1]
             oauth2_service = current_app.oauth2_service
             
             validation_result = oauth2_service.validate_token(token)
             
             if not validation_result.get('valid'):
-                return jsonify({'error': validation_result.get('error', 'Invalid token')}), 401
+                error_message = validation_result.get('error', 'Invalid token')
+                # Enhanced security logging
+                client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
+                user_agent = request.headers.get('User-Agent', 'Unknown')
+                endpoint = request.endpoint
+                logger.warning(
+                    f"Authentication failure - IP: {client_ip}, "
+                    f"Endpoint: {endpoint}, UA: {user_agent}, "
+                    f"Error: {error_message}"
+                )
+                return jsonify({'error': 'Authentication failed'}), 401
             
             # Check permissions if required
             if permissions:
@@ -85,11 +94,28 @@ def require_oauth2(permissions=None):
                     return jsonify({'error': 'Insufficient permissions'}), 403
             
             # Add user context to request
+            g.oauth2_user = validation_result
             request.oauth2_user = validation_result
             
             return f(*args, **kwargs)
         
         return decorated_function
+    return decorator
+
+
+def require_oauth2_if_enabled(config_key, permissions=None):
+    """Require OAuth2 only when the given app config flag is enabled."""
+    def decorator(f):
+        protected_view = require_oauth2(permissions)(f)
+
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_app.config.get(config_key, False):
+                return f(*args, **kwargs)
+            return protected_view(*args, **kwargs)
+
+        return decorated_function
+
     return decorator
 
 # Convenience decorator for admin endpoints

@@ -178,7 +178,7 @@ def upload_stl():
             local_path=file_path,
             file_size=file_size,
             file_hash=file_hash,
-            uploaded_by=None,  # OAuth2 user - no local user ID
+            uploaded_by=request.oauth2_user.get('email') if hasattr(request, 'oauth2_user') else 'admin@mardigrasworld.com',
             upload_timestamp=datetime.utcnow(),
             description=description if description else None,
             tags=tags if tags else None,
@@ -244,7 +244,7 @@ def upload_video():
             original_filename=filename,
             local_path=file_path,
             file_size=os.path.getsize(file_path),
-            uploaded_by=None,  # OAuth2 user - no local user ID
+            uploaded_by=request.oauth2_user.get('email') if hasattr(request, 'oauth2_user') else 'admin@mardigrasworld.com',
             upload_timestamp=datetime.utcnow(),
             description=description if description else None,
             associated_stl_id=associated_stl_id

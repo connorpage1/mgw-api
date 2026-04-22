@@ -18,12 +18,20 @@ def api_terms():
         category_slug = request.args.get('category', '').strip()
         difficulty = request.args.get('difficulty', '').strip()
         
-        # Remove limit entirely - get all terms
+        # Input validation
+        if len(query) > 100:
+            return jsonify({'error': 'Search query too long'}), 400
+        if len(category_slug) > 50:
+            return jsonify({'error': 'Category parameter too long'}), 400
+        if difficulty and difficulty not in ['tourist', 'local', 'expert']:
+            return jsonify({'error': 'Invalid difficulty parameter'}), 400
+        
+        # Enforce reasonable limits
         limit_param = request.args.get('limit', type=int)
         if limit_param and limit_param > 0:
-            limit = min(limit_param, 2000)  # Cap at 2000 for safety
+            limit = min(limit_param, 1000)  # Cap at 1000 for safety
         else:
-            limit = None  # No limit
+            limit = 100  # Default limit to prevent resource exhaustion
         
         # Build query
         terms_query = Term.query.join(Category).filter(
@@ -68,11 +76,8 @@ def api_terms():
         
         terms_query = terms_query.order_by(sort_column)
         
-        # Apply limit if specified
-        if limit:
-            terms = terms_query.limit(limit).all()
-        else:
-            terms = terms_query.all()
+        # Always apply limit for security
+        terms = terms_query.limit(limit).all()
         
         # Convert to dictionaries
         terms_data = [term.to_dict() for term in terms]
