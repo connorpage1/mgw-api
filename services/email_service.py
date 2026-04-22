@@ -1,52 +1,211 @@
 """
-Email service for sending user notifications and password setup links
-
-NOTE: This service is currently disabled as it references User models that don't exist
-in this pure OAuth2 API service. Email functionality is handled by the auth service.
+Email service for sending notifications with SendGrid and SMTP fallback support
 """
-import smtplib
 import os
-import secrets
-import hashlib
-from datetime import datetime, timedelta
-from flask import current_app, render_template, url_for
-# Disabled - not used in pure API service with OAuth2
-# from models import db, User, PasswordResetToken
+import base64
+from typing import List, Dict, Optional, Union
+from dataclasses import dataclass
+from flask import current_app
 from utils.logger import logger
 
-# Import email classes with explicit module references to avoid conflicts
+# Try to import SendGrid (optional dependency)
+try:
+    from sendgrid import SendGridAPIClient
+    from sendgrid.helpers.mail import Mail, Attachment, FileContent, FileName, FileType, Disposition
+    SENDGRID_AVAILABLE = True
+except ImportError:
+    SENDGRID_AVAILABLE = False
+    SendGridAPIClient = None
+    Mail = None
+
+# SMTP fallback imports
+import smtplib
 import email.mime.text
 import email.mime.multipart
+import email.mime.base
+import email.encoders
 
+@dataclass
+class EmailAttachment:
+    """Email attachment data class"""
+    filename: str
+    content: Union[bytes, str]
+    content_type: str = 'application/octet-stream'
+    disposition: str = 'attachment'
 
 class EmailService:
-    """Service for sending emails"""
+    """Service for sending emails via SendGrid API or SMTP fallback"""
     
     def __init__(self):
-        self.smtp_server = os.environ.get('SMTP_SERVER', 'localhost')
-        self.smtp_port = int(os.environ.get('SMTP_PORT', '587'))
-        self.smtp_username = os.environ.get('SMTP_USERNAME')
-        self.smtp_password = os.environ.get('SMTP_PASSWORD')
-        self.smtp_use_tls = os.environ.get('SMTP_USE_TLS', 'true').lower() == 'true'
-        self.from_email = os.environ.get('FROM_EMAIL', 'noreply@mardigrasworld.com')
+        # Email provider configuration
+        self.provider = os.environ.get('EMAIL_PROVIDER', '').lower()
         
-    def _send_email(self, to_email, subject, html_content, text_content=None):
-        """Send an email via SMTP"""
+        # SendGrid configuration
+        self.sendgrid_api_key = os.environ.get('SENDGRID_API_KEY')
+        self.sendgrid_from_email = os.environ.get('SENDGRID_FROM_EMAIL', os.environ.get('FROM_EMAIL'))
+        self.sendgrid_from_name = os.environ.get('SENDGRID_FROM_NAME', os.environ.get('FROM_NAME', 'Mardi Gras World'))
+        
+        # SMTP fallback configuration
+        self.smtp_server = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+        self.smtp_port = int(os.environ.get('MAIL_PORT', '587'))
+        self.smtp_username = os.environ.get('MAIL_USERNAME')
+        self.smtp_password = os.environ.get('MAIL_PASSWORD')
+        self.smtp_use_tls = os.environ.get('MAIL_USE_TLS', 'true').lower() == 'true'
+        self.from_email = os.environ.get('FROM_EMAIL', 'noreply@mardigrasworld.com')
+        self.from_name = os.environ.get('FROM_NAME', 'Mardi Gras World')
+        
+        # Initialize SendGrid client if available and configured
+        self.sendgrid_client = None
+        if SENDGRID_AVAILABLE and self.sendgrid_api_key and self.provider == 'sendgrid':
+            try:
+                self.sendgrid_client = SendGridAPIClient(api_key=self.sendgrid_api_key)
+                logger.info("SendGrid client initialized successfully")
+            except Exception as e:
+                logger.warning(f"Failed to initialize SendGrid client: {e}")
+                
+    def send_email(self, 
+                   recipients: List[str], 
+                   subject: str, 
+                   text_content: Optional[str] = None,
+                   html_content: Optional[str] = None,
+                   attachments: Optional[List[EmailAttachment]] = None) -> Dict[str, any]:
+        """
+        Send email via SendGrid API or SMTP fallback
+        
+        Args:
+            recipients: List of recipient email addresses
+            subject: Email subject
+            text_content: Plain text content (optional)
+            html_content: HTML content (optional) 
+            attachments: List of EmailAttachment objects (optional)
+            
+        Returns:
+            Dict with success status and details
+        """
+        if not recipients:
+            return {'success': False, 'error': 'No recipients specified'}
+            
+        if not (text_content or html_content):
+            return {'success': False, 'error': 'Either text_content or html_content must be provided'}
+        
+        # Try SendGrid first if configured
+        if self.sendgrid_client:
+            return self._send_via_sendgrid(recipients, subject, text_content, html_content, attachments)
+        
+        # Fallback to SMTP
+        return self._send_via_smtp(recipients, subject, text_content, html_content, attachments)
+    
+    def _send_via_sendgrid(self, recipients: List[str], subject: str, text_content: Optional[str], 
+                          html_content: Optional[str], attachments: Optional[List[EmailAttachment]]) -> Dict[str, any]:
+        """Send email via SendGrid API"""
+        try:
+            # Create SendGrid mail object
+            message = Mail(
+                from_email=(self.sendgrid_from_email, self.sendgrid_from_name),
+                to_emails=recipients,
+                subject=subject
+            )
+            
+            # Add content
+            if text_content:
+                message.content = [{"type": "text/plain", "value": text_content}]
+            if html_content:
+                if text_content:
+                    message.content.append({"type": "text/html", "value": html_content})
+                else:
+                    message.content = [{"type": "text/html", "value": html_content}]
+            
+            # Add attachments if provided
+            if attachments:
+                for attachment in attachments:
+                    try:
+                        # Convert content to base64 if it's bytes
+                        if isinstance(attachment.content, bytes):
+                            content_b64 = base64.b64encode(attachment.content).decode()
+                        else:
+                            content_b64 = base64.b64encode(attachment.content.encode()).decode()
+                        
+                        sg_attachment = Attachment(
+                            file_content=FileContent(content_b64),
+                            file_name=FileName(attachment.filename),
+                            file_type=FileType(attachment.content_type),
+                            disposition=Disposition(attachment.disposition)
+                        )
+                        message.attachment = sg_attachment
+                        
+                    except Exception as e:
+                        logger.warning(f"Failed to add attachment {attachment.filename}: {e}")
+            
+            # Send email
+            response = self.sendgrid_client.send(message)
+            
+            if response.status_code in [200, 202]:
+                logger.info(f"Email sent successfully via SendGrid to {recipients}")
+                return {
+                    'success': True, 
+                    'provider': 'sendgrid',
+                    'status_code': response.status_code,
+                    'message_id': response.headers.get('X-Message-Id')
+                }
+            else:
+                logger.error(f"SendGrid API error: {response.status_code} - {response.body}")
+                return {
+                    'success': False, 
+                    'provider': 'sendgrid',
+                    'error': f"API error: {response.status_code}",
+                    'details': response.body
+                }
+                
+        except Exception as e:
+            logger.error(f"SendGrid email send failed: {e}")
+            return {'success': False, 'provider': 'sendgrid', 'error': str(e)}
+    
+    def _send_via_smtp(self, recipients: List[str], subject: str, text_content: Optional[str],
+                      html_content: Optional[str], attachments: Optional[List[EmailAttachment]]) -> Dict[str, any]:
+        """Send email via SMTP"""
         try:
             # Create message
-            msg = email.mime.multipart.MIMEMultipart('alternative')
+            msg = email.mime.multipart.MIMEMultipart('mixed')
             msg['Subject'] = subject
-            msg['From'] = self.from_email
-            msg['To'] = to_email
+            msg['From'] = f"{self.from_name} <{self.from_email}>"
+            msg['To'] = ', '.join(recipients)
             
-            # Add text version if provided
+            # Create content container
+            content_container = email.mime.multipart.MIMEMultipart('alternative')
+            
+            # Add text content
             if text_content:
-                part1 = email.mime.text.MIMEText(text_content, 'plain')
-                msg.attach(part1)
+                text_part = email.mime.text.MIMEText(text_content, 'plain')
+                content_container.attach(text_part)
             
-            # Add HTML version
-            part2 = email.mime.text.MIMEText(html_content, 'html')
-            msg.attach(part2)
+            # Add HTML content
+            if html_content:
+                html_part = email.mime.text.MIMEText(html_content, 'html')
+                content_container.attach(html_part)
+            
+            msg.attach(content_container)
+            
+            # Add attachments if provided
+            if attachments:
+                for attachment in attachments:
+                    try:
+                        part = email.mime.base.MIMEBase('application', 'octet-stream')
+                        
+                        if isinstance(attachment.content, bytes):
+                            part.set_payload(attachment.content)
+                        else:
+                            part.set_payload(attachment.content.encode())
+                        
+                        email.encoders.encode_base64(part)
+                        part.add_header(
+                            'Content-Disposition',
+                            f'{attachment.disposition}; filename= {attachment.filename}'
+                        )
+                        part.add_header('Content-Type', attachment.content_type)
+                        msg.attach(part)
+                        
+                    except Exception as e:
+                        logger.warning(f"Failed to add SMTP attachment {attachment.filename}: {e}")
             
             # Send email
             with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
@@ -54,82 +213,20 @@ class EmailService:
                     server.starttls()
                 if self.smtp_username and self.smtp_password:
                     server.login(self.smtp_username, self.smtp_password)
-                server.send_message(msg)
+                server.send_message(msg, to_addrs=recipients)
             
-            logger.info(f"Email sent successfully to {to_email}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Failed to send email to {to_email}: {e}")
-            return False
-    
-    def generate_password_setup_token(self, user_id):
-        """Generate a secure password setup token"""
-        # Generate a random token
-        raw_token = secrets.token_urlsafe(32)
-        
-        # Hash the token for storage
-        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-        
-        # Set expiration (24 hours from now)
-        expires_at = datetime.utcnow() + timedelta(hours=24)
-        
-        # Store in database
-        reset_token = PasswordResetToken(
-            user_id=user_id,
-            token_hash=token_hash,
-            expires_at=expires_at
-        )
-        
-        db.session.add(reset_token)
-        db.session.commit()
-        
-        return raw_token
-    
-    def send_welcome_email(self, user):
-        """Send welcome email with password setup link"""
-        try:
-            # Generate password setup token
-            token = self.generate_password_setup_token(user.id)
-            
-            # Generate password setup URL
-            set_password_url = url_for('auth.set_password', token=token, _external=True)
-            
-            # Render email template
-            html_content = render_template('email/welcome_set_password.html', 
-                                         user=user, 
-                                         set_password_url=set_password_url)
-            
-            # Send email
-            subject = "Welcome to Mardi Gras Admin - Set Your Password"
-            return self._send_email(user.email, subject, html_content)
+            logger.info(f"Email sent successfully via SMTP to {recipients}")
+            return {'success': True, 'provider': 'smtp'}
             
         except Exception as e:
-            logger.error(f"Failed to send welcome email to {user.email}: {e}")
-            return False
-    
-    def send_password_reset_email(self, user):
-        """Send password reset email"""
-        try:
-            # Generate password reset token
-            token = self.generate_password_setup_token(user.id)
-            
-            # Generate password reset URL
-            reset_url = url_for('auth.set_password', token=token, _external=True)
-            
-            # Render email template
-            html_content = render_template('email/password_reset.html', 
-                                         user=user, 
-                                         reset_url=reset_url)
-            
-            # Send email
-            subject = "Password Reset Request - Mardi Gras Admin"
-            return self._send_email(user.email, subject, html_content)
-            
-        except Exception as e:
-            logger.error(f"Failed to send password reset email to {user.email}: {e}")
-            return False
+            logger.error(f"SMTP email send failed: {e}")
+            return {'success': False, 'provider': 'smtp', 'error': str(e)}
 
+    # Legacy compatibility methods
+    def _send_email(self, to_email: str, subject: str, html_content: str, text_content: str = None) -> bool:
+        """Legacy method for backward compatibility"""
+        result = self.send_email([to_email], subject, text_content, html_content)
+        return result.get('success', False)
 
 # Create a global instance
 email_service = EmailService()
