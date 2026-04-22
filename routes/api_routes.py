@@ -631,3 +631,201 @@ def get_file_stats():
     except Exception as e:
         logger.error(f"Error getting file stats: {e}")
         return jsonify({'error': 'Internal server error'}), 500
+
+# === EMAIL TESTING ENDPOINTS ===
+
+@api_bp.route('/test/email', methods=['POST'])
+@require_oauth2()
+def test_email():
+    """Test email functionality (admin only)"""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        # Input validation
+        recipient = data.get('recipient')
+        if not recipient:
+            return jsonify({'error': 'recipient field is required'}), 400
+        
+        # Email validation
+        import re
+        email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_pattern, recipient):
+            return jsonify({'error': 'Invalid email address format'}), 400
+        
+        subject = data.get('subject', 'Test Email from Mardi Gras API')
+        test_type = data.get('test_type', 'simple')
+        
+        # Import email service
+        from services.email_service import email_service, EmailAttachment
+        
+        # Get current user email for logging
+        user_email = request.oauth2_user.get('email', 'unknown@admin.com')
+        
+        if test_type == 'simple':
+            # Simple text and HTML email
+            text_content = f"""
+Hello,
+
+This is a test email from the Mardi Gras API to verify SendGrid integration.
+
+Sent by: {user_email}
+Timestamp: {datetime.utcnow().isoformat()}Z
+
+If you receive this email, the SendGrid integration is working correctly!
+
+Best regards,
+Mardi Gras World API
+            """.strip()
+            
+            html_content = f"""
+<html>
+<body>
+    <h2>🎭 Mardi Gras API - Test Email</h2>
+    <p>Hello,</p>
+    <p>This is a <strong>test email</strong> from the Mardi Gras API to verify SendGrid integration.</p>
+    
+    <ul>
+        <li><strong>Sent by:</strong> {user_email}</li>
+        <li><strong>Timestamp:</strong> {datetime.utcnow().isoformat()}Z</li>
+        <li><strong>Provider:</strong> SendGrid API</li>
+    </ul>
+    
+    <p>If you receive this email, the SendGrid integration is working correctly! ✅</p>
+    
+    <p>Best regards,<br>
+    <strong>Mardi Gras World API</strong></p>
+</body>
+</html>
+            """.strip()
+            
+            result = email_service.send_email(
+                recipients=[recipient],
+                subject=subject,
+                text_content=text_content,
+                html_content=html_content
+            )
+            
+        elif test_type == 'attachment':
+            # Test with PDF attachment
+            import io
+            
+            # Create a simple test PDF content (mock)
+            pdf_content = f"""
+Test PDF Report
+Generated: {datetime.utcnow().isoformat()}Z
+Sent by: {user_email}
+Recipient: {recipient}
+
+This is a test PDF attachment to verify that SendGrid can handle file attachments.
+            """.encode()
+            
+            attachment = EmailAttachment(
+                filename=f"test-report-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}.txt",
+                content=pdf_content,
+                content_type="text/plain"
+            )
+            
+            text_content = f"""
+Hello,
+
+This is a test email with attachment from the Mardi Gras API.
+
+Sent by: {user_email}
+Timestamp: {datetime.utcnow().isoformat()}Z
+
+Please check that the attachment was delivered successfully.
+
+Best regards,
+Mardi Gras World API
+            """.strip()
+            
+            html_content = f"""
+<html>
+<body>
+    <h2>🎭 Mardi Gras API - Test Email with Attachment</h2>
+    <p>Hello,</p>
+    <p>This is a <strong>test email with attachment</strong> from the Mardi Gras API.</p>
+    
+    <ul>
+        <li><strong>Sent by:</strong> {user_email}</li>
+        <li><strong>Timestamp:</strong> {datetime.utcnow().isoformat()}Z</li>
+        <li><strong>Attachment:</strong> test-report.txt</li>
+    </ul>
+    
+    <p>Please check that the attachment was delivered successfully. 📎</p>
+    
+    <p>Best regards,<br>
+    <strong>Mardi Gras World API</strong></p>
+</body>
+</html>
+            """.strip()
+            
+            result = email_service.send_email(
+                recipients=[recipient],
+                subject=f"{subject} (with attachment)",
+                text_content=text_content,
+                html_content=html_content,
+                attachments=[attachment]
+            )
+        else:
+            return jsonify({'error': 'Invalid test_type. Use "simple" or "attachment"'}), 400
+        
+        # Log the test
+        logger.info(f"Email test performed by {user_email} - recipient: {recipient}, type: {test_type}, result: {result.get('success')}")
+        
+        # Return detailed result
+        response = {
+            'success': result.get('success', False),
+            'provider': result.get('provider'),
+            'recipient': recipient,
+            'test_type': test_type,
+            'sent_by': user_email,
+            'timestamp': datetime.utcnow().isoformat()
+        }
+        
+        if result.get('success'):
+            response['message'] = f'Test email sent successfully via {result.get("provider")}'
+            if result.get('message_id'):
+                response['message_id'] = result.get('message_id')
+        else:
+            response['error'] = result.get('error', 'Unknown error')
+            if result.get('details'):
+                response['details'] = result.get('details')
+        
+        status_code = 200 if result.get('success') else 500
+        return jsonify(response), status_code
+        
+    except Exception as e:
+        logger.error(f"Error in email test: {e}")
+        return jsonify({'error': 'Email test failed', 'details': str(e)}), 500
+
+@api_bp.route('/test/email/config', methods=['GET'])  
+@require_oauth2()
+def test_email_config():
+    """Check email configuration status (admin only)"""
+    try:
+        from services.email_service import email_service
+        
+        config_status = {
+            'provider': email_service.provider or 'not_set',
+            'sendgrid_configured': bool(email_service.sendgrid_api_key and email_service.provider == 'sendgrid'),
+            'sendgrid_client_available': email_service.sendgrid_client is not None,
+            'from_email': email_service.sendgrid_from_email or email_service.from_email,
+            'from_name': email_service.sendgrid_from_name or email_service.from_name,
+            'smtp_fallback_available': bool(email_service.smtp_username and email_service.smtp_password),
+        }
+        
+        # Check if SendGrid library is available
+        try:
+            from sendgrid import SendGridAPIClient
+            config_status['sendgrid_library_available'] = True
+        except ImportError:
+            config_status['sendgrid_library_available'] = False
+        
+        return jsonify(config_status)
+        
+    except Exception as e:
+        logger.error(f"Error checking email config: {e}")
+        return jsonify({'error': 'Failed to check email configuration'}), 500
